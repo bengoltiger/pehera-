@@ -1,0 +1,221 @@
+@import 'tailwindcss';
+
+/* ==========================================================================
+   PEHRA design tokens
+
+   Severity colours mirror app/core/risk_config.py RISK_LEVELS exactly. The UI
+   must never invent a colour the engine does not know about, and severity is
+   NEVER communicated by colour alone -- every badge carries a label, an icon
+   and an ASCII/pattern marker so it survives colour-blindness, greyscale
+   printing and screen readers (Section 34).
+   ========================================================================== */
+@theme {
+  --color-ink-950: #0b1017;
+  --color-ink-900: #10161f;
+  --color-ink-850: #151d28;
+  --color-ink-800: #1b2531;
+  --color-ink-700: #26303e;
+  --color-ink-600: #38455a;
+  --color-ink-500: #5b6b83;
+  --color-ink-400: #8496ae;
+  --color-ink-300: #adbccd;
+  --color-ink-200: #d3dde8;
+  --color-ink-100: #e9eff5;
+  --color-ink-50: #f5f8fb;
+
+  --color-safe: #1f7a4d;
+  --color-low: #3f7fbf;
+  --color-moderate: #c98a17;
+  --color-high: #d1600f;
+  --color-critical: #b3161c;
+
+  --color-accent: #2f7fd1;
+  --color-accent-bright: #4d9ff0;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+
+/* --------------------------------------------------------------------------
+   Base
+   -------------------------------------------------------------------------- */
+:root {
+  color-scheme: dark;
+  --sev-safe: #1f7a4d;
+  --sev-low: #3f7fbf;
+  --sev-moderate: #c98a17;
+  --sev-high: #d1600f;
+  --sev-critical: #b3161c;
+}
+
+* {
+  border-color: color-mix(in oklab, var(--color-ink-600) 55%, transparent);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ink-950);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Visible focus for every interactive element (Section 34). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent-bright);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Respect reduced-motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Utilities
+   -------------------------------------------------------------------------- */
+@utility panel {
+  background: var(--color-ink-900);
+  border: 1px solid color-mix(in oklab, var(--color-ink-600) 50%, transparent);
+  border-radius: 0.75rem;
+}
+
+@utility panel-tight {
+  background: var(--color-ink-850);
+  border: 1px solid color-mix(in oklab, var(--color-ink-600) 45%, transparent);
+  border-radius: 0.5rem;
+}
+
+@utility hairline {
+  border-color: color-mix(in oklab, var(--color-ink-600) 50%, transparent);
+}
+
+/* Colour-blind-safe severity fills: each level also carries a distinct
+   texture, so the map and the badges remain distinguishable in greyscale. */
+.sev-pattern-solid {
+  background-image: none;
+}
+.sev-pattern-dots {
+  background-image: radial-gradient(currentColor 1px, transparent 1.2px);
+  background-size: 6px 6px;
+}
+.sev-pattern-diagonal {
+  background-image: repeating-linear-gradient(
+    45deg,
+    currentColor 0 1.5px,
+    transparent 1.5px 6px
+  );
+}
+.sev-pattern-cross {
+  background-image: repeating-linear-gradient(45deg, currentColor 0 1.5px, transparent 1.5px 7px),
+    repeating-linear-gradient(-45deg, currentColor 0 1.5px, transparent 1.5px 7px);
+}
+.sev-pattern-hatch {
+  background-image: repeating-linear-gradient(
+    90deg,
+    currentColor 0 2px,
+    transparent 2px 5px
+  );
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-ink-950);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-700);
+  border-radius: 6px;
+  border: 2px solid var(--color-ink-950);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-600);
+}
+
+/* Skeleton shimmer for honest loading states (never fake numbers). */
+@keyframes pehra-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-ink-800) 25%,
+    var(--color-ink-700) 37%,
+    var(--color-ink-800) 63%
+  );
+  background-size: 200% 100%;
+  animation: pehra-shimmer 1.4s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+@keyframes pehra-pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--sev-critical) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.pulse-critical {
+  animation: pehra-pulse-ring 2s ease-out infinite;
+}
+
+/* Leaflet dark treatment + attribution legibility */
+.leaflet-container {
+  background: #0d141c;
+  font-family: var(--font-sans);
+}
+.leaflet-control-attribution {
+  background: rgba(11, 16, 23, 0.82) !important;
+  color: var(--color-ink-400) !important;
+  font-size: 10px !important;
+}
+.leaflet-control-attribution a {
+  color: var(--color-ink-300) !important;
+}
+.leaflet-bar a {
+  background: var(--color-ink-800) !important;
+  color: var(--color-ink-100) !important;
+  border-color: var(--color-ink-600) !important;
+}
+.leaflet-bar a:hover {
+  background: var(--color-ink-700) !important;
+}
+.leaflet-tooltip {
+  background: var(--color-ink-900) !important;
+  border: 1px solid var(--color-ink-600) !important;
+  color: var(--color-ink-100) !important;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45) !important;
+}
+.leaflet-tooltip-top::before {
+  border-top-color: var(--color-ink-600) !important;
+}

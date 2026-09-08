@@ -1,0 +1,32 @@
+# ---------------------------------------------------------------- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local SQLite database — recreated on first run from the seed data.
+*.db
+*.db-shm
+*.db-wal
+
+# ------------------------------------------------------------------ Node ----
+node_modules/
+.vite/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Built SPA served by FastAPI — regenerate with `npm run build`.
+backend/static/
+
+# ----------------------------------------------------------------- Local ----
+.env
+.env.local
+*.log
+.DS_Store
+.idea/
+.vscode/
