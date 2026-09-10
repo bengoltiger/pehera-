@@ -8,7 +8,6 @@ import {
   BarChart3,
   ChevronsRight,
   ClipboardList,
-  Database,
   FlaskConical,
   Gauge,
   History,
@@ -51,7 +50,6 @@ const AUTHORITY_NAV: NavItem[] = [
   { to: '/authority/queue', label: 'nav.queue', icon: <ListOrdered size={15} /> },
   { to: '/authority/alerts', label: 'nav.alerts', icon: <Siren size={15} /> },
   { to: '/authority/lab', label: 'nav.lab', icon: <FlaskConical size={15} /> },
-  { to: '/data', label: 'nav.data', icon: <Database size={15} /> },
 ]
 
 /* Screens are added to the navigation only once they are actually implemented —
@@ -244,7 +242,6 @@ const SECTION_TITLES: Record<string, string> = {
   '/authority/queue': 'Priority Queue',
   '/authority/alerts': 'Alerts Console',
   '/authority/lab': 'Simulation Lab',
-  '/data': 'Data Sources',
   '/citizen': 'Village Defense',
   '/citizen/evacuate': 'Evacuate',
 }

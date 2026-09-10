@@ -4,7 +4,6 @@ import { AppShell, FullPageLoader } from './components/AppShell'
 import { EmptyState, Panel } from './components/ui'
 import { useAuth } from './lib/providers'
 import CitizenApp from './pages/citizen/CitizenApp'
-import DataSources from './pages/citizen/DataSources'
 import Login from './pages/Login'
 import AlertsPage from './pages/authority/AlertsPage'
 import MapPage from './pages/authority/MapPage'
@@ -117,17 +116,6 @@ export default function App() {
             </RequireAuth>
           }
         />
-        <Route
-          path="/data"
-          element={
-            <RequireAuth>
-              <AppShell>
-                <DataSources />
-              </AppShell>
-            </RequireAuth>
-          }
-        />
-
         {/* citizen app (its own chrome: mobile column, bottom nav) */}
         <Route
           path="/citizen"

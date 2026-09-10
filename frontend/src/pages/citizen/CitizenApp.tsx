@@ -43,7 +43,6 @@ import { useI18n } from '../../lib/i18n'
 import { useAuth, useLive } from '../../lib/providers'
 import { useTheme } from '../../lib/theme'
 import type { Alert, InfrastructureItem } from '../../lib/types'
-import DataSources from './DataSources'
 
 /* -------------------------------------------------------------------------- */
 /* helpers                                                                     */
@@ -666,7 +665,6 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'home', label: 'Defense', icon: <Home size={19} aria-hidden /> },
   { id: 'map', label: 'Map', icon: <MapIcon size={19} aria-hidden /> },
   { id: 'evacuate', label: 'Evacuate', icon: <Siren size={19} aria-hidden /> },
-  { id: 'data', label: 'Data', icon: <Database size={19} aria-hidden /> },
 ]
 
 export default function CitizenApp({ initialTab = 'home' }: { initialTab?: Tab }) {
@@ -722,7 +720,6 @@ export default function CitizenApp({ initialTab = 'home' }: { initialTab?: Tab }
               {tab === 'home' && <VillageDefense onEvacuate={() => setTab('evacuate')} />}
               {tab === 'map' && <CitizenMap user={user ?? {}} />}
               {tab === 'evacuate' && <Evacuate user={user ?? {}} />}
-              {tab === 'data' && <DataSources />}
             </motion.div>
           </AnimatePresence>
         </main>

@@ -126,15 +126,6 @@ describe('new tactical screens', () => {
     expectNoCrash()
   }, 40000)
 
-  it.runIf(apiUp)('renders the data sources page with the dataset roadmap', async () => {
-    renderAt('/data')
-    await waitFor(() => expect(screen.getByText(/Dataset Resources/i)).toBeInTheDocument(), {
-      timeout: 20000,
-    })
-    await waitFor(() => expect(screen.getByText(/IMD — India Meteorological Department/i)).toBeInTheDocument())
-    expect(screen.getAllByText(/SIMULATED/i).length).toBeGreaterThan(0)
-    expectNoCrash()
-  }, 40000)
 })
 
 describe('citizen app', () => {

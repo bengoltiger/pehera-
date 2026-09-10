@@ -166,7 +166,7 @@ frontend/
     components/   UI primitives, app shell, risk detail, map, radar canvas,
                   hero map, motion helpers, composer
     pages/        login, authority command centre (incl. SITREP + Predict),
-                  citizen app (village defense, evacuation, data sources)
+                  citizen app (village defense, evacuation)
     test/         Vitest suites that run against the real API
 docs/
   DESIGN.md       "Mission Tactical Intelligence" design system (Stitch export)
@@ -231,16 +231,16 @@ degraded and failure states can be demonstrated rather than described.
 ```bash
 cd backend  && PYTHONPATH=. .venv/bin/python scripts/api_smoke.py     # 57 endpoints
 cd backend  && PYTHONPATH=. .venv/bin/python scripts/engine_smoke.py  # engine invariants
-cd frontend && npm run test                                           # Vitest + jsdom (11 tests)
+cd frontend && npm run test                                           # Vitest + jsdom (10 tests)
 cd frontend && npx tsc -b && npx oxlint                               # types + lint
 ```
 
 The frontend suite renders each route **against the running FastAPI process** instead of
 mocked fixtures — mocks agree with whatever the UI assumes, and that is precisely the
 class of bug (API shape drift) the suite exists to catch. It covers the authority
-command centre, the new SITREP / Predict / data-sources screens, the citizen app
-(both tabs), and unauthenticated redirects. It skips itself with a clear message when
-the backend is not up.
+command centre, the new SITREP / Predict screens, the citizen app (both tabs), and
+unauthenticated redirects. It skips itself with a clear message when the backend is not
+up.
 
 ---
 
@@ -258,9 +258,9 @@ the backend is not up.
 * 57 REST endpoints, SSE stream with polling fallback, JWT auth + RBAC, rate limiting
   (the client backs off and retries on 429)
 * Authority UI: overview, **SITREP command & map**, **Predict / real-time telemetry feed**,
-  hyperlocal map, priority queue, alerts console, simulation lab, **data sources**
-* **Citizen app** (village defense + guided evacuation, mobile-first, EN/हिं account
-  aware) wired to the same live engine
+  hyperlocal map, priority queue, alerts console, simulation lab
+* **Citizen app** (village defense + guided evacuation, mobile-first, EN/हिं account aware)
+  wired to the same live engine
 * Light + dark themes, Framer Motion transitions, tactical radar canvas of live cells
 
 **Not built yet**
