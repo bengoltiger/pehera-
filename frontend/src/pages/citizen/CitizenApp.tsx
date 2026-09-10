@@ -16,7 +16,6 @@ import {
   Droplets,
   Footprints,
   Home,
-  LocateFixed,
   LogOut,
   Map as MapIcon,
   MapPin,
@@ -34,12 +33,12 @@ import {
   Waves,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { DataHonestyBanner } from '../../components/AppShell'
 import { HeroMap } from '../../components/HeroMap'
 import { RadarCanvas } from '../../components/RadarCanvas'
-import { Button, Chip, PeHraLogo, SeverityBadge, SeverityBar, StatusPip } from '../../components/ui'
+import { Chip, PeHraLogo, SeverityBadge, SeverityBar, StatusPip } from '../../components/ui'
 import { Rise } from '../../components/anim'
 import { api } from '../../lib/api'
 import { clsx, fmtClock, fmtMinutes, fmtNumber, haversineKm, relativeTime, titleCase, walkMinutes } from '../../lib/format'
@@ -83,7 +82,8 @@ function useCountdown(totalSeconds: number | null | undefined): number {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Live location (real browser GPS, honest fallbacks)                          */
+/* Live location — ALWAYS ON: the app acquires and continuously tracks GPS    */
+/* itself; the citizen never has to press anything.                           */
 /* -------------------------------------------------------------------------- */
 
 interface GpsFix {
@@ -96,34 +96,49 @@ interface GpsFix {
 function useLiveFix() {
   const [fix, setFix] = useState<GpsFix | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [getting, setGetting] = useState(false)
-  const request = useCallback(() => {
+  const [getting, setGetting] = useState(true)
+
+  useEffect(() => {
     if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
       setError('This browser cannot access GPS — distances below are measured from your registered zone centre instead.')
+      setGetting(false)
       return
     }
     setGetting(true)
     setError(null)
-    navigator.geolocation.getCurrentPosition(
+    let settled = false
+    const watchId = navigator.geolocation.watchPosition(
       (pos) => {
+        if (settled) return
+        settled = true
+        setGetting(false)
+        setError(null)
         setFix({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
           accuracy: pos.coords.accuracy,
           at: Date.now(),
         })
-        setGetting(false)
       },
       (err) => {
-        const reason =
-          err.code === 1 ? 'Location permission was denied' : err.code === 3 ? 'GPS timed out' : 'Position unavailable'
-        setError(`${reason} — distances below are measured from your registered zone centre instead.`)
-        setGetting(false)
+        // Permission denial is permanent for this session — stop and say so.
+        // Unavailable/timeout are transient: keep the watch running.
+        if (err.code === 1) {
+          if (settled) return
+          settled = true
+          setGetting(false)
+          setError('Location permission was denied — distances below are measured from your registered zone centre instead.')
+        }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+      { enableHighAccuracy: true, maximumAge: 60000, timeout: 15000 },
     )
+    return () => {
+      settled = true
+      navigator.geolocation.clearWatch(watchId)
+    }
   }, [])
-  return { fix, error, getting, request }
+
+  return { fix, error, getting }
 }
 
 interface NearestState {
@@ -139,13 +154,11 @@ function LiveLocationCard({
   fix,
   error,
   getting,
-  request,
   nearest,
 }: {
   fix: GpsFix | null
   error: string | null
   getting: boolean
-  request: () => void
   nearest: NearestState
 }) {
   return (
@@ -155,27 +168,20 @@ function LiveLocationCard({
           <Crosshair size={15} className="text-accent-bright" aria-hidden />
           Live location
         </span>
-        <Button
-          size="sm"
-          variant={fix ? 'ghost' : 'primary'}
-          pending={getting}
-          icon={<LocateFixed size={12} />}
-          onClick={request}
-        >
-          {fix ? 'Refresh fix' : 'Use my location'}
-        </Button>
+        <Chip tone={fix ? 'good' : 'neutral'}>{fix ? 'TRACKING' : 'ALWAYS ON'}</Chip>
       </div>
-      {!fix && !error && !getting && (
-        <p className="text-[11px] leading-snug text-ink-400">
-          Share your GPS position to see distances measured from where you actually are — not the zone centre.
+      {getting && !fix && !error && (
+        <p className="flex items-center gap-1.5 text-[11px] text-ink-400">
+          <span className="h-1.5 w-1.5 animate-ping rounded-full bg-accent" aria-hidden />
+          Acquiring GPS position — this runs automatically while the app is open.
         </p>
       )}
-      {getting && <p className="text-[11px] text-ink-400">Acquiring GPS fix…</p>}
       {error && <p className="rounded bg-moderate/10 px-2 py-1 text-[11px] leading-snug text-moderate">{error}</p>}
       {fix && (
         <div className="space-y-1">
           <p className="font-mono text-[11px] text-ink-200">
-            {fix.lat.toFixed(5)}N {fix.lng.toFixed(5)}E · ±{Math.round(fix.accuracy)} m
+            {fix.lat.toFixed(5)}N {fix.lng.toFixed(5)}E · ±{Math.round(fix.accuracy)} m ·{' '}
+            {relativeTime(new Date(fix.at).toISOString())}
           </p>
           {nearest.data ? (
             <p className="text-[11px] leading-snug text-ink-300">
@@ -405,11 +411,15 @@ function VillageDefense({
   const shelters = useShelters(locationId)
   const topShelter = shelters[0]
 
-  const { fix, error: gpsError, getting: gpsGetting, request: requestFix } = useLiveFix()
-  const nearest = useApi(
-    () => api.nearestLocation(fix!.lat, fix!.lng),
-    { enabled: !!fix, deps: [fix?.lat, fix?.lng], liveUpdate: false },
-  )
+  const { fix, error: gpsError, getting: gpsGetting } = useLiveFix()
+  // Round to ~100 m so the continuous watch only refetches the nearest zone
+  // once the user has meaningfully moved.
+  const fixKey = fix ? `${Math.round(fix.lat * 1000)}:${Math.round(fix.lng * 1000)}` : null
+  const nearest = useApi(() => api.nearestLocation(fix!.lat, fix!.lng), {
+    enabled: !!fix,
+    deps: [fixKey],
+    liveUpdate: false,
+  })
   const shelterFromYouKm =
     fix && topShelter ? haversineKm(fix.lat, fix.lng, topShelter.shelter.lat, topShelter.shelter.lng) : null
 
@@ -550,7 +560,7 @@ function VillageDefense({
 
       {/* live GPS location */}
       <Rise>
-        <LiveLocationCard fix={fix} error={gpsError} getting={gpsGetting} request={requestFix} nearest={nearest} />
+        <LiveLocationCard fix={fix} error={gpsError} getting={gpsGetting} nearest={nearest} />
       </Rise>
 
       {/* map card */}
@@ -703,11 +713,13 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
   const threats = useApi(() => api.threats())
   const topShelter = shelters[0]
 
-  const { fix, error: gpsError, getting: gpsGetting, request: requestFix } = useLiveFix()
-  const nearest = useApi(
-    () => api.nearestLocation(fix!.lat, fix!.lng),
-    { enabled: !!fix, deps: [fix?.lat, fix?.lng], liveUpdate: false },
-  )
+  const { fix, error: gpsError, getting: gpsGetting } = useLiveFix()
+  const fixKey = fix ? `${Math.round(fix.lat * 1000)}:${Math.round(fix.lng * 1000)}` : null
+  const nearest = useApi(() => api.nearestLocation(fix!.lat, fix!.lng), {
+    enabled: !!fix,
+    deps: [fixKey],
+    liveUpdate: false,
+  })
   const shelterFromYouKm =
     fix && topShelter ? haversineKm(fix.lat, fix.lng, topShelter.shelter.lat, topShelter.shelter.lng) : null
 
@@ -811,7 +823,7 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
       )}
 
       {/* live GPS location — matters most mid-evacuation */}
-      <LiveLocationCard fix={fix} error={gpsError} getting={gpsGetting} request={requestFix} nearest={nearest} />
+      <LiveLocationCard fix={fix} error={gpsError} getting={gpsGetting} nearest={nearest} />
 
       {/* radar map card */}
       <div className="flex flex-col overflow-hidden rounded-lg border border-ink-600 shadow-md">
