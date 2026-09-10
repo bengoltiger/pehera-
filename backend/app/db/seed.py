@@ -9,6 +9,7 @@ throughout the API. Nothing here should be quoted as official data.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 
 from sqlalchemy.orm import Session
 
@@ -246,13 +247,13 @@ def seed_all(db: Session, *, force: bool = False) -> dict:
         items = list(INFRA_TEMPLATE) + EXTRA_INFRA.get(spec["id"], [])
         for i, (kind, name, crit, cap, dlat, dlng) in enumerate(items):
             iid = f"inf_{spec['id'][4:]}_{i}"
-            if db.get(Infrastructure, iid):
-                continue
-            db.add(
-                Infrastructure(
+            area = spec["name"].split("–")[0].split(" Ward")[0]
+            row = db.get(Infrastructure, iid)
+            if row is None:
+                row = Infrastructure(
                     id=iid,
                     location_id=spec["id"],
-                    name=f"{name}, {spec['name'].split('–')[0].split(' Ward')[0]}",
+                    name=f"{name}, {area}",
                     kind=kind,
                     latitude=round(spec["latitude"] + dlat, 6),
                     longitude=round(spec["longitude"] + dlng, 6),
@@ -260,8 +261,28 @@ def seed_all(db: Session, *, force: bool = False) -> dict:
                     criticality=crit,
                     data_origin="demo_seed",
                 )
-            )
-            created["infrastructure"] += 1
+                db.add(row)
+                created["infrastructure"] += 1
+            # Contact details for places a citizen would actually call or walk
+            # to. Deterministic per row so re-seeding never changes them.
+            if kind in ("shelter", "hospital") and not row.address:
+                h = int(hashlib.md5(iid.encode()).hexdigest()[:8], 16)
+                row.address = f"{area} municipal campus, Pune, Maharashtra {411001 + (h % 99)}"
+                row.phone = f"+91 98220 {10000 + (h % 89999)}"
+
+    # Backfill rows created before contact details existed (idempotent).
+    for row in db.query(Infrastructure).filter(
+        Infrastructure.kind.in_(["shelter", "hospital"]),
+        Infrastructure.address.is_(None),
+    ).all():
+        area = (
+            db.query(Location).filter(Location.id == row.location_id).first()
+        )
+        area_name = (area.name.split("–")[0].split(" Ward")[0]) if area else "Pune"
+        h = int(hashlib.md5(row.id.encode()).hexdigest()[:8], 16)
+        row.address = f"{area_name} municipal campus, Pune, Maharashtra {411001 + (h % 99)}"
+        row.phone = f"+91 98220 {10000 + (h % 89999)}"
+        created["infrastructure"] += 1
 
     # --- users ---
     for u in SEED_USERS:

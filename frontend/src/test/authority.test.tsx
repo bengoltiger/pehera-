@@ -140,6 +140,9 @@ describe('citizen app', () => {
     // zone + shelter + checklist chrome
     await waitFor(() => expect(screen.getByText(/Evacuation Readiness Checklist/i)).toBeInTheDocument())
     expect(screen.getByText('OFFLINE-FIRST')).toBeInTheDocument()
+    // when-to-move guidance + live-location card are part of the screen
+    await waitFor(() => expect(screen.getAllByText(/When to move/i).length).toBeGreaterThan(0))
+    expect(screen.getAllByText(/Live location/i).length).toBeGreaterThan(0)
     expectNoCrash()
   }, 40000)
 

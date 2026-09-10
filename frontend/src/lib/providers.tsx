@@ -220,6 +220,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
       const tick = async () => {
         try {
           const res = await api.recentEvents(10)
+          // The fetch can outlive the component (or the test environment);
+          // never touch state after cleanup has run.
+          if (closed) return
           setConnected(true)
           for (const raw of res.events.slice().reverse()) {
             const e = raw as unknown as LiveEvent
@@ -230,6 +233,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
           }
           if (seen.size > 200) seen = new Set(Array.from(seen).slice(-100))
         } catch {
+          if (closed) return
           setConnected(false)
         }
       }
@@ -275,10 +279,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
         })
       }
       source.onerror = () => {
+        if (closed) return
         setConnected(false)
         source?.close()
         source = null
-        if (closed) return
         // one retry, then fall back to polling so the UI never goes stale
         retry = window.setTimeout(() => {
           if (closed) return

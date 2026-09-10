@@ -110,6 +110,9 @@ class Infrastructure(Base, TimestampMixin):
     capacity: Mapped[Optional[int]] = mapped_column(Integer)
     criticality: Mapped[float] = mapped_column(Float, default=0.5)  # 0..1
     data_origin: Mapped[str] = mapped_column(String(32), default="demo_seed")
+    # Contact / siting details surfaced to citizens (demo dataset).
+    address: Mapped[Optional[str]] = mapped_column(String(200))
+    phone: Mapped[Optional[str]] = mapped_column(String(40))
 
 
 class Hazard(Base):

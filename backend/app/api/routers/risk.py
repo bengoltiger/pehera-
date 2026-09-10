@@ -105,6 +105,7 @@ def get_location(location_id: str, db: Session = Depends(get_db)) -> dict:
                 "id": i.id, "name": i.name, "kind": i.kind, "latitude": i.latitude,
                 "longitude": i.longitude, "capacity": i.capacity,
                 "criticality": i.criticality, "data_origin": i.data_origin,
+                "address": i.address, "phone": i.phone,
             }
             for i in infra
         ],
@@ -342,7 +343,8 @@ def map_layers(db: Session = Depends(get_db)) -> dict:
         ],
         "infrastructure": [
             {"id": i.id, "name": i.name, "kind": i.kind, "lat": i.latitude, "lng": i.longitude,
-             "criticality": i.criticality, "capacity": i.capacity, "location_id": i.location_id}
+             "criticality": i.criticality, "capacity": i.capacity, "location_id": i.location_id,
+             "address": i.address, "phone": i.phone}
             for i in infra
         ],
         "rivers": [{"id": k, "points": v} for k, v in rivers.items()],

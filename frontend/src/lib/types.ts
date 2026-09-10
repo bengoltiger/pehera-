@@ -572,6 +572,9 @@ export interface InfrastructureItem {
   criticality: string
   capacity: number | null
   location_id: string
+  /** Siting + contact details (shelters & hospitals); demo dataset. */
+  address?: string | null
+  phone?: string | null
 }
 
 export interface MapLayers {

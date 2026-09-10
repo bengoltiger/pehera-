@@ -11,13 +11,18 @@ import {
   Check,
   ChevronRight,
   Compass,
+  Crosshair,
   Database,
   Droplets,
   Footprints,
   Home,
+  LocateFixed,
+  LogOut,
   Map as MapIcon,
+  MapPin,
   Moon,
   PersonStanding,
+  Phone,
   Radio,
   Route,
   Siren,
@@ -29,20 +34,20 @@ import {
   Waves,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { DataHonestyBanner } from '../../components/AppShell'
 import { HeroMap } from '../../components/HeroMap'
 import { RadarCanvas } from '../../components/RadarCanvas'
-import { Chip, PeHraLogo, SeverityBadge, SeverityBar, StatusPip } from '../../components/ui'
+import { Button, Chip, PeHraLogo, SeverityBadge, SeverityBar, StatusPip } from '../../components/ui'
 import { Rise } from '../../components/anim'
 import { api } from '../../lib/api'
-import { clsx, fmtClock, fmtNumber, haversineKm, relativeTime, titleCase, walkMinutes } from '../../lib/format'
+import { clsx, fmtClock, fmtMinutes, fmtNumber, haversineKm, relativeTime, titleCase, walkMinutes } from '../../lib/format'
 import { useApi } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
 import { useAuth, useLive } from '../../lib/providers'
 import { useTheme } from '../../lib/theme'
-import type { Alert, InfrastructureItem } from '../../lib/types'
+import type { Alert, InfrastructureItem, RiskResponse } from '../../lib/types'
 
 /* -------------------------------------------------------------------------- */
 /* helpers                                                                     */
@@ -75,6 +80,211 @@ function useCountdown(totalSeconds: number | null | undefined): number {
     return () => window.clearInterval(id)
   }, [totalSeconds])
   return left
+}
+
+/* -------------------------------------------------------------------------- */
+/* Live location (real browser GPS, honest fallbacks)                          */
+/* -------------------------------------------------------------------------- */
+
+interface GpsFix {
+  lat: number
+  lng: number
+  accuracy: number
+  at: number
+}
+
+function useLiveFix() {
+  const [fix, setFix] = useState<GpsFix | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [getting, setGetting] = useState(false)
+  const request = useCallback(() => {
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+      setError('This browser cannot access GPS — distances below are measured from your registered zone centre instead.')
+      return
+    }
+    setGetting(true)
+    setError(null)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setFix({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          at: Date.now(),
+        })
+        setGetting(false)
+      },
+      (err) => {
+        const reason =
+          err.code === 1 ? 'Location permission was denied' : err.code === 3 ? 'GPS timed out' : 'Position unavailable'
+        setError(`${reason} — distances below are measured from your registered zone centre instead.`)
+        setGetting(false)
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    )
+  }, [])
+  return { fix, error, getting, request }
+}
+
+interface NearestState {
+  data: {
+    location: { name: string }
+    distance_km: number
+    within_coverage: boolean
+    note: string | null
+  } | null
+}
+
+function LiveLocationCard({
+  fix,
+  error,
+  getting,
+  request,
+  nearest,
+}: {
+  fix: GpsFix | null
+  error: string | null
+  getting: boolean
+  request: () => void
+  nearest: NearestState
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-ink-600 bg-ink-850 p-3 shadow-md">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 font-head text-sm font-semibold text-ink-100">
+          <Crosshair size={15} className="text-accent-bright" aria-hidden />
+          Live location
+        </span>
+        <Button
+          size="sm"
+          variant={fix ? 'ghost' : 'primary'}
+          pending={getting}
+          icon={<LocateFixed size={12} />}
+          onClick={request}
+        >
+          {fix ? 'Refresh fix' : 'Use my location'}
+        </Button>
+      </div>
+      {!fix && !error && !getting && (
+        <p className="text-[11px] leading-snug text-ink-400">
+          Share your GPS position to see distances measured from where you actually are — not the zone centre.
+        </p>
+      )}
+      {getting && <p className="text-[11px] text-ink-400">Acquiring GPS fix…</p>}
+      {error && <p className="rounded bg-moderate/10 px-2 py-1 text-[11px] leading-snug text-moderate">{error}</p>}
+      {fix && (
+        <div className="space-y-1">
+          <p className="font-mono text-[11px] text-ink-200">
+            {fix.lat.toFixed(5)}N {fix.lng.toFixed(5)}E · ±{Math.round(fix.accuracy)} m
+          </p>
+          {nearest.data ? (
+            <p className="text-[11px] leading-snug text-ink-300">
+              Nearest monitored zone:{' '}
+              <strong className="text-ink-100">{titleCase(nearest.data.location.name)}</strong> —{' '}
+              {nearest.data.distance_km.toFixed(1)} km away
+              {nearest.data.within_coverage
+                ? ' · inside engine coverage'
+                : ` · outside coverage${nearest.data.note ? ` (${nearest.data.note})` : ''}`}
+            </p>
+          ) : (
+            <p className="text-[10px] text-ink-500">Checking nearest monitored zone…</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* When to move — the engine's own trend, peak and lead time, in one verdict   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Display-only mapping of the engine's own outputs (lead time, momentum) to a
+ * citizen verdict. No risk arithmetic here — the numbers are the backend's.
+ */
+function moveGuidance(risk: RiskResponse): { tone: 'danger' | 'warn' | 'good' | 'info'; text: string } {
+  const lead = risk.lead_time
+  const rate = risk.risk.momentum.rate_per_hour
+  const severity = risk.risk.severity.key
+  if (severity === 'CRITICAL') {
+    return { tone: 'danger', text: 'LEAVE NOW — your zone is currently CRITICAL. Head to your designated shelter immediately.' }
+  }
+  if (lead?.available && lead.seconds != null && lead.seconds <= 30 * 60) {
+    const label = lead.label ?? `${Math.round(lead.seconds / 60)} min`
+    return { tone: 'danger', text: `LEAVE NOW — the engine projects a critical crossing in ${label}.` }
+  }
+  if (lead?.available && lead.seconds != null && lead.seconds <= 120 * 60) {
+    const label = lead.label ?? 'the next two hours'
+    return { tone: 'warn', text: `BEGIN MOVING — be at your shelter within ${label}.` }
+  }
+  if (severity === 'HIGH') {
+    return { tone: 'warn', text: 'Prepare to move — your zone is HIGH. Pack and stand ready to evacuate at a moment’s notice.' }
+  }
+  if (rate > 1.5) return { tone: 'warn', text: 'Risk is climbing — keep the app open and be ready to move at a moment’s notice.' }
+  if (rate < -1.5) return { tone: 'good', text: 'Risk is falling — no need to move yet. Keep monitoring.' }
+  return { tone: 'info', text: 'Risk is holding steady — keep monitoring. This guidance refreshes with every engine update.' }
+}
+
+function WhenToMoveCard({ risk }: { risk: RiskResponse }) {
+  const g = moveGuidance(risk)
+  const mom = risk.risk.momentum
+  const lead = risk.lead_time
+  const peak = risk.peak
+  const toneText = { danger: 'text-critical', warn: 'text-moderate', good: 'text-safe', info: 'text-accent-bright' }[g.tone]
+  const toneBox = {
+    danger: 'border-critical/50 bg-critical/10',
+    warn: 'border-moderate/50 bg-moderate/10',
+    good: 'border-safe/40 bg-safe/10',
+    info: 'border-accent/40 bg-accent/8',
+  }[g.tone]
+  return (
+    <div className={`rounded-lg border p-3 shadow-md ${toneBox}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 font-head text-sm font-semibold text-ink-100">
+          <Timer size={15} className={toneText} aria-hidden />
+          When to move
+        </span>
+        <span className={`font-mono text-[10px] font-bold ${toneText}`}>
+          RISK RATE {risk.risk.overall.toFixed(0)}/100
+        </span>
+      </div>
+      <p className={`mt-1.5 text-xs font-semibold ${toneText}`}>{g.text}</p>
+      <div className="mt-2 space-y-1 text-[11px] text-ink-300">
+        <p>
+          Trend:{' '}
+          <span className="text-ink-100">
+            {mom.arrow} {mom.label.toLowerCase()}
+          </span>{' '}
+          <span className="font-mono text-ink-400">
+            {mom.rate_per_hour >= 0 ? '+' : ''}
+            {mom.rate_per_hour.toFixed(1)} pts/h
+          </span>
+        </p>
+        <p className="leading-snug text-ink-400">{mom.note}</p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
+          <span>
+            Projected peak:{' '}
+            {peak?.available && peak.in_minutes != null ? (
+              <span className="font-mono text-ink-100">
+                {peak.risk?.toFixed(0)}/100 in {fmtMinutes(peak.in_minutes)}
+              </span>
+            ) : (
+              <span className="text-ink-500">{peak?.reason_unavailable ?? 'no peak predicted'}</span>
+            )}
+          </span>
+          <span>
+            Lead time:{' '}
+            {lead?.available && lead.label ? (
+              <span className="font-mono text-ink-100">{lead.label}</span>
+            ) : (
+              <span className="text-ink-500">no critical crossing predicted</span>
+            )}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 const CHECKLIST = [
@@ -194,6 +404,14 @@ function VillageDefense({
   const locAlerts = useApi(() => api.alertsForLocation(locationId), { deps: [locationId] })
   const shelters = useShelters(locationId)
   const topShelter = shelters[0]
+
+  const { fix, error: gpsError, getting: gpsGetting, request: requestFix } = useLiveFix()
+  const nearest = useApi(
+    () => api.nearestLocation(fix!.lat, fix!.lng),
+    { enabled: !!fix, deps: [fix?.lat, fix?.lng], liveUpdate: false },
+  )
+  const shelterFromYouKm =
+    fix && topShelter ? haversineKm(fix.lat, fix.lng, topShelter.shelter.lat, topShelter.shelter.lng) : null
 
   const activeAlerts = (locAlerts.data?.issued ?? []).filter((a) => a.is_active)
   const alert = activeAlerts[0]
@@ -325,6 +543,16 @@ function VillageDefense({
         )}
       </AnimatePresence>
 
+      {/* when to move — risk rate, trend, peak and lead time */}
+      <Rise>
+        <WhenToMoveCard risk={r} />
+      </Rise>
+
+      {/* live GPS location */}
+      <Rise>
+        <LiveLocationCard fix={fix} error={gpsError} getting={gpsGetting} request={requestFix} nearest={nearest} />
+      </Rise>
+
       {/* map card */}
       <Rise>
         <div className="flex flex-col overflow-hidden rounded-lg border border-ink-600 shadow-xl">
@@ -365,11 +593,33 @@ function VillageDefense({
               <div className="flex flex-col">
                 <span className="hud-label text-accent-bright">DESIGNATED ASSEMBLY DESTINATION</span>
                 <h2 className="font-head text-sm font-bold text-ink-50">{titleCase(topShelter.shelter.name)}</h2>
+                {topShelter.shelter.address && (
+                  <p className="mt-0.5 flex items-start gap-1 text-[11px] leading-snug text-ink-300">
+                    <MapPin size={11} className="mt-0.5 shrink-0 text-ink-500" aria-hidden />
+                    {topShelter.shelter.address}
+                  </p>
+                )}
               </div>
-              <span className="rounded bg-ink-700 px-1.5 py-0.5 font-mono text-[11px] font-bold text-accent-bright">
-                {topShelter.distanceKm.toFixed(1)} KM
-              </span>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span className="rounded bg-ink-700 px-1.5 py-0.5 font-mono text-[11px] font-bold text-accent-bright">
+                  {topShelter.distanceKm.toFixed(1)} KM
+                </span>
+                {shelterFromYouKm != null && (
+                  <span className="rounded bg-safe/15 px-1.5 py-0.5 font-mono text-[9px] font-bold text-safe">
+                    {shelterFromYouKm.toFixed(1)} KM FROM YOU
+                  </span>
+                )}
+              </div>
             </div>
+            {topShelter.shelter.phone && (
+              <a
+                href={`tel:${topShelter.shelter.phone.replace(/\s/g, '')}`}
+                className="flex items-center gap-1.5 rounded-md border border-ink-600 px-2 py-1.5 text-[11px] text-accent-bright transition-colors hover:bg-ink-800"
+              >
+                <Phone size={12} aria-hidden />
+                Shelter contact: {topShelter.shelter.phone}
+              </a>
+            )}
             <div className="flex items-center justify-between rounded-md bg-ink-900 p-2">
               <span className="flex items-center gap-1.5">
                 <Footprints size={20} className="text-accent-bright" aria-hidden />
@@ -452,6 +702,14 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
   const shelters = useShelters(locationId)
   const threats = useApi(() => api.threats())
   const topShelter = shelters[0]
+
+  const { fix, error: gpsError, getting: gpsGetting, request: requestFix } = useLiveFix()
+  const nearest = useApi(
+    () => api.nearestLocation(fix!.lat, fix!.lng),
+    { enabled: !!fix, deps: [fix?.lat, fix?.lng], liveUpdate: false },
+  )
+  const shelterFromYouKm =
+    fix && topShelter ? haversineKm(fix.lat, fix.lng, topShelter.shelter.lat, topShelter.shelter.lng) : null
 
   const activeAlerts = (locAlerts.data?.issued ?? []).filter((a) => a.is_active)
   const alert: Alert | undefined = activeAlerts[0]
@@ -552,6 +810,9 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
         </div>
       )}
 
+      {/* live GPS location — matters most mid-evacuation */}
+      <LiveLocationCard fix={fix} error={gpsError} getting={gpsGetting} request={requestFix} nearest={nearest} />
+
       {/* radar map card */}
       <div className="flex flex-col overflow-hidden rounded-lg border border-ink-600 shadow-md">
         <div className="relative">
@@ -602,11 +863,22 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
           <div>
             <h2 className="font-head text-base font-bold text-ink-50">{titleCase(topShelter.shelter.name)}</h2>
             <p className="font-mono text-[10px] text-ink-400">{topShelter.shelter.location_id.toUpperCase()} · SEED DATA</p>
+            {topShelter.shelter.address && (
+              <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug text-ink-300">
+                <MapPin size={11} className="mt-0.5 shrink-0 text-ink-500" aria-hidden />
+                {topShelter.shelter.address}
+              </p>
+            )}
           </div>
           <div className="mt-0.5 grid grid-cols-2 gap-2">
             <div className="flex flex-col rounded bg-ink-900 p-2">
-              <span className="font-mono text-[9px] text-ink-400 uppercase">DISTANCE</span>
+              <span className="font-mono text-[9px] text-ink-400 uppercase">DISTANCE (ZONE)</span>
               <span className="font-head text-sm font-bold text-ink-100">{topShelter.distanceKm.toFixed(1)} km</span>
+              {shelterFromYouKm != null && (
+                <span className="mt-0.5 font-mono text-[9px] font-bold text-safe">
+                  {shelterFromYouKm.toFixed(1)} KM FROM YOU
+                </span>
+              )}
             </div>
             <div className="flex flex-col rounded bg-ink-900 p-2">
               <span className="font-mono text-[9px] text-ink-400 uppercase">TRANSIT TIME</span>
@@ -615,6 +887,15 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
               </span>
             </div>
           </div>
+          {topShelter.shelter.phone && (
+            <a
+              href={`tel:${topShelter.shelter.phone.replace(/\s/g, '')}`}
+              className="flex items-center gap-1.5 rounded-md border border-ink-600 px-2 py-1.5 text-[11px] text-accent-bright transition-colors hover:bg-ink-800"
+            >
+              <Phone size={12} aria-hidden />
+              {topShelter.shelter.phone}
+            </a>
+          )}
           {topShelter.shelter.capacity != null && (
             <p className="font-mono text-[10px] text-ink-400">
               SHELTER CAPACITY: {fmtNumber(topShelter.shelter.capacity)} (seeded estimate)
@@ -713,7 +994,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ]
 
 export default function CitizenApp({ initialTab = 'home' }: { initialTab?: Tab }) {
-  const { user } = useAuth()
+  const { user, signOut } = useAuth()
   const { theme, toggle } = useTheme()
   const { connected } = useLive()
   const location = useLocation()
@@ -749,6 +1030,15 @@ export default function CitizenApp({ initialTab = 'home' }: { initialTab?: Tab }
             className="grid h-7 w-7 place-items-center rounded-md border border-ink-600 text-ink-300 hover:bg-ink-800 hover:text-accent-bright"
           >
             {theme === 'dark' ? <Sun size={13} aria-hidden /> : <Moon size={13} aria-hidden />}
+          </button>
+          <button
+            type="button"
+            onClick={signOut}
+            aria-label="Sign out"
+            title="Sign out"
+            className="grid h-7 w-7 place-items-center rounded-md border border-ink-600 text-ink-300 transition-colors hover:bg-ink-800 hover:text-critical"
+          >
+            <LogOut size={13} aria-hidden />
           </button>
         </header>
 
