@@ -89,6 +89,8 @@ describe('authority command centre', () => {
   }, 40000)
 
   it.runIf(apiUp)('renders the simulation lab with the scenario library', async () => {
+    // The Simulation Lab is administrator-only, so this test must sign in as admin.
+    setToken(await login('admin', 'admin12345'))
     renderAt('/authority/lab')
     await waitFor(() => expect(screen.getByText(/Scenario library/i)).toBeInTheDocument(), {
       timeout: 20000,
@@ -149,6 +151,41 @@ describe('citizen app', () => {
       { timeout: 20000 },
     )
     await waitFor(() => expect(screen.getByText(/NEAREST SAFE HAVEN|No evacuation required/i)).toBeInTheDocument())
+    expectNoCrash()
+  }, 40000)
+})
+
+describe('role-scoped navigation', () => {
+  it.runIf(apiUp)('hides the administrator-only Simulation Lab tab from authority users', async () => {
+    setToken(await login('authority', 'authority123'))
+    renderAt('/authority')
+    await waitFor(() => expect(screen.getByText(/DEMO \/ SIMULATED DATA/i)).toBeInTheDocument(), {
+      timeout: 15000,
+    })
+    // The desktop and compact navs both render in jsdom — assert across both.
+    expect(screen.queryAllByText(/Simulation lab/i)).toHaveLength(0)
+    // Authority-designed tabs must still be visible.
+    expect(screen.getAllByText(/SITREP/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Priority queue/i).length).toBeGreaterThan(0)
+    expectNoCrash()
+  }, 40000)
+
+  it.runIf(apiUp)('shows the Simulation Lab tab to administrators', async () => {
+    setToken(await login('admin', 'admin12345'))
+    renderAt('/authority')
+    await waitFor(() => expect(screen.getAllByText(/Simulation lab/i).length).toBeGreaterThan(0), {
+      timeout: 15000,
+    })
+    expectNoCrash()
+  }, 40000)
+
+  it.runIf(apiUp)('blocks a direct /authority/lab URL for authority users', async () => {
+    setToken(await login('authority', 'authority123'))
+    renderAt('/authority/lab')
+    await waitFor(() =>
+      expect(screen.getByText(/Your role cannot open this screen/i)).toBeInTheDocument(),
+      { timeout: 15000 },
+    )
     expectNoCrash()
   }, 40000)
 })

@@ -109,7 +109,7 @@ export default function App() {
         <Route
           path="/authority/lab"
           element={
-            <RequireAuth roles={AUTH_ROLES}>
+            <RequireAuth roles={['administrator']}>
               <AppShell>
                 <SimLab />
               </AppShell>

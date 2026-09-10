@@ -659,7 +659,7 @@ function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
 /* Shell                                                                       */
 /* -------------------------------------------------------------------------- */
 
-type Tab = 'home' | 'map' | 'evacuate' | 'data'
+type Tab = 'home' | 'map' | 'evacuate'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'home', label: 'Defense', icon: <Home size={19} aria-hidden /> },

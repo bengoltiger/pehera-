@@ -49,7 +49,8 @@ const AUTHORITY_NAV: NavItem[] = [
   { to: '/authority/map', label: 'nav.map', icon: <MapIcon size={15} /> },
   { to: '/authority/queue', label: 'nav.queue', icon: <ListOrdered size={15} /> },
   { to: '/authority/alerts', label: 'nav.alerts', icon: <Siren size={15} /> },
-  { to: '/authority/lab', label: 'nav.lab', icon: <FlaskConical size={15} /> },
+  /* Administrator-only screen: hidden from regular authority (field officer) users. */
+  { to: '/authority/lab', label: 'nav.lab', icon: <FlaskConical size={15} />, roles: ['administrator'] },
 ]
 
 /* Screens are added to the navigation only once they are actually implemented —
