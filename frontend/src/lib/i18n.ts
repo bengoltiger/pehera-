@@ -19,6 +19,9 @@ export const STRINGS: Record<Lang, Dict> = {
       'All environmental values are produced by deterministic simulation. No live weather, satellite, river or notification service is connected.',
 
     'nav.overview': 'Overview',
+    'nav.sitrep': 'SITREP',
+    'nav.predict': 'Predict',
+    'nav.data': 'Data sources',
     'nav.map': 'Map',
     'nav.queue': 'Priority queue',
     'nav.alerts': 'Alerts',
@@ -79,6 +82,9 @@ export const STRINGS: Record<Lang, Dict> = {
     'risk.MODERATE': 'Moderate',
     'risk.HIGH': 'High',
     'risk.CRITICAL': 'Critical',
+
+    'citizen.defense': 'Village Defense',
+    'citizen.evacuate': 'Evacuate',
   },
   hi: {
     'app.name': 'पहरा',
@@ -88,6 +94,9 @@ export const STRINGS: Record<Lang, Dict> = {
       'सभी पर्यावरणीय मान नियतात्मक सिमुलेशन से बने हैं। कोई वास्तविक मौसम, उपग्रह, नदी या सूचना सेवा जुड़ी नहीं है।',
 
     'nav.overview': 'सारांश',
+    'nav.sitrep': 'स्थिति रिपोर्ट',
+    'nav.predict': 'पूर्वानुमान',
+    'nav.data': 'डेटा स्रोत',
     'nav.map': 'नक्शा',
     'nav.queue': 'प्राथमिकता सूची',
     'nav.alerts': 'चेतावनियाँ',
@@ -148,6 +157,9 @@ export const STRINGS: Record<Lang, Dict> = {
     'risk.MODERATE': 'मध्यम',
     'risk.HIGH': 'उच्च',
     'risk.CRITICAL': 'गंभीर',
+
+    'citizen.defense': 'गाँव रक्षा',
+    'citizen.evacuate': 'निकासी',
   },
 }
 

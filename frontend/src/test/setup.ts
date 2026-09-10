@@ -53,4 +53,52 @@ if (typeof window !== 'undefined') {
     // exactly what we want in tests.
     Object.defineProperty(window, 'EventSource', { value: undefined, writable: true })
   }
+
+  // Leaflet uses the canvas renderer (preferCanvas) for the risk field, ward
+  // polygons and threat cells. jsdom has no 2D canvas context, so we stub a
+  // no-op context: the maps still mount and the DOM around them (badges,
+  // legends, HUD overlays) is what the tests assert on.
+  const noop2d = {
+    canvas: null as unknown,
+    drawImage: () => {},
+    clearRect: () => {},
+    fillRect: () => {},
+    strokeRect: () => {},
+    beginPath: () => {},
+    closePath: () => {},
+    moveTo: () => {},
+    lineTo: () => {},
+    arc: () => {},
+    arcTo: () => {},
+    bezierCurveTo: () => {},
+    quadraticCurveTo: () => {},
+    rect: () => {},
+    fill: () => {},
+    stroke: () => {},
+    clip: () => {},
+    save: () => {},
+    restore: () => {},
+    translate: () => {},
+    rotate: () => {},
+    scale: () => {},
+    setTransform: () => {},
+    resetTransform: () => {},
+    setLineDash: () => {},
+    getLineDash: () => [] as number[],
+    measureText: () => ({ width: 0 }) as TextMetrics,
+    fillText: () => {},
+    strokeText: () => {},
+    createLinearGradient: () => ({ addColorStop: () => {} }),
+    createRadialGradient: () => ({ addColorStop: () => {} }),
+    createPattern: () => (null as unknown as CanvasPattern),
+    putImageData: () => {},
+    getImageData: () => ({ data: new Uint8ClampedArray(4) }),
+    createImageData: () => ({ data: new Uint8ClampedArray(4) }),
+  }
+  const ctxStub = (w: unknown, h: unknown) => {
+    noop2d.canvas = { width: w, height: h }
+    return noop2d
+  }
+  ;(window.HTMLCanvasElement.prototype as unknown as { getContext: unknown }).getContext =
+    ((type: string) => (type === '2d' ? ctxStub(300, 150) : null)) as never
 }

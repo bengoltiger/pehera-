@@ -563,18 +563,20 @@ export interface Metrics {
   n: number
 }
 
+export interface InfrastructureItem {
+  id: string
+  name: string
+  kind: string
+  lat: number
+  lng: number
+  criticality: string
+  capacity: number | null
+  location_id: string
+}
+
 export interface MapLayers {
   zones: (LocationSummary & { polygon: number[][] | null })[]
-  infrastructure: {
-    id: string
-    name: string
-    kind: string
-    lat: number
-    lng: number
-    criticality: string
-    capacity: number | null
-    location_id: string
-  }[]
+  infrastructure: InfrastructureItem[]
   rivers: { id: string; points: { location_id: string; lat: number; lng: number; name: string }[] }[]
   threat_cells: ThreatCell[]
   alerts: {

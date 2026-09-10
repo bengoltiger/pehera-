@@ -14,6 +14,7 @@ import {
 } from 'react'
 import { api, apiUrl, PehraError, getToken, setToken } from './api'
 import { I18nContext, translate } from './i18n'
+import { ThemeProvider } from './theme'
 import type { EngineConfig, Lang, User } from './types'
 
 /* ========================================================================== *
@@ -316,7 +317,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
     <I18nContext.Provider value={i18n}>
       <AuthContext.Provider value={auth}>
         <ConfigContext.Provider value={configValue}>
-          <LiveContext.Provider value={live}>{children}</LiveContext.Provider>
+          <LiveContext.Provider value={live}>
+            <ThemeProvider>{children}</ThemeProvider>
+          </LiveContext.Provider>
         </ConfigContext.Provider>
       </AuthContext.Provider>
     </I18nContext.Provider>

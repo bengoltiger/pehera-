@@ -1,18 +1,36 @@
 /** Small presentation helpers. None of these compute risk — they format it. */
 import type { SeverityKey } from './types'
 
+/** Fixed hex values for canvas/SVG drawing (Leaflet fills) — the map canvas
+ *  stays dark in both themes, so these never change. */
 export const SEVERITY_COLOR: Record<SeverityKey, string> = {
-  SAFE: '#1f7a4d',
-  LOW: '#3f7fbf',
-  MODERATE: '#c98a17',
-  HIGH: '#d1600f',
-  CRITICAL: '#b3161c',
+  SAFE: '#22c55e',
+  LOW: '#3b82f6',
+  MODERATE: '#f5b942',
+  HIGH: '#f97316',
+  CRITICAL: '#ef4444',
 }
 
 export const LEVEL_COLOR: Record<string, string> = {
-  WATCH: '#c98a17',
-  WARNING: '#d1600f',
-  CRITICAL: '#b3161c',
+  WATCH: '#f5b942',
+  WARNING: '#f97316',
+  CRITICAL: '#ef4444',
+}
+
+/** Theme-aware severity colours for inline UI styles (badges, bars). They
+ *  resolve through CSS variables so light/dark both stay legible. */
+export const SEVERITY_VAR: Record<SeverityKey, string> = {
+  SAFE: 'var(--sev-safe)',
+  LOW: 'var(--sev-low)',
+  MODERATE: 'var(--sev-moderate)',
+  HIGH: 'var(--sev-high)',
+  CRITICAL: 'var(--sev-critical)',
+}
+
+export const LEVEL_VAR: Record<string, string> = {
+  WATCH: 'var(--sev-moderate)',
+  WARNING: 'var(--sev-high)',
+  CRITICAL: 'var(--sev-critical)',
 }
 
 export const SEVERITY_PATTERN: Record<SeverityKey, string> = {
@@ -108,4 +126,31 @@ export function withAlpha(hex: string, alpha: number): string {
 
 export function titleCase(s: string): string {
   return s.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/** Great-circle distance in km. Display maths only (shelter walk estimates)
+ *  — never used inside the risk engine. */
+export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLng = ((lng2 - lng1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(a))
+}
+
+/** Seconds → "HH:MM:SS" for T-minus countdowns. */
+export function fmtClock(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(h)}:${p(m)}:${p(sec)}`
+}
+
+/** Approx. walking minutes at 4.5 km/h. Display estimate only. */
+export function walkMinutes(km: number): number {
+  return Math.max(1, Math.round((km / 4.5) * 60))
 }

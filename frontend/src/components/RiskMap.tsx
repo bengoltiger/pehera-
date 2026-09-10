@@ -97,6 +97,11 @@ function FitBounds({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
   const done = useRef(false)
   useEffect(() => {
     if (!bounds || done.current) return
+    // A zero-size container (headless/jsdom, or a not-yet-laid-out panel)
+    // makes fitBounds compute a NaN zoom and corrupt every projection, so we
+    // only fit once the map actually has pixels to fit into.
+    const size = map.getSize()
+    if (size.x < 2 || size.y < 2) return
     map.fitBounds(bounds, { padding: [24, 24] })
     done.current = true
   }, [bounds, map])

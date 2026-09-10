@@ -1,13 +1,14 @@
 /**
- * Global chrome: the data-honesty banner, the simulation clock, connection
- * status, language switch and the role-aware navigation.
+ * Global chrome: data-honesty banner, the //OPS command header (mesh status,
+ * threat-level pill, simulation clock, theme + language switches), and the
+ * role-aware navigation.
  */
 import {
-  Activity,
   AlertTriangle,
   BarChart3,
   ChevronsRight,
   ClipboardList,
+  Database,
   FlaskConical,
   Gauge,
   History,
@@ -15,22 +16,24 @@ import {
   ListOrdered,
   LogOut,
   Map as MapIcon,
-  Radio,
+  Moon,
+  Radar,
   RotateCcw,
   ScrollText,
   Server,
   Siren,
-  Wifi,
-  WifiOff,
+  Sun,
+  Waypoints,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
-import { clsx, fmtNumber } from '../lib/format'
+import { fmtNumber } from '../lib/format'
 import { useApi, useMutation } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
 import { useAuth, useLive } from '../lib/providers'
-import { Button, Chip, Spinner } from './ui'
+import { useTheme } from '../lib/theme'
+import { Button, Chip, PeHraLogo, Spinner, StatusPip } from './ui'
 import type { Lang } from '../lib/types'
 
 interface NavItem {
@@ -42,10 +45,13 @@ interface NavItem {
 
 const AUTHORITY_NAV: NavItem[] = [
   { to: '/authority', label: 'nav.overview', icon: <LayoutDashboard size={15} /> },
+  { to: '/authority/sitrep', label: 'nav.sitrep', icon: <Radar size={15} /> },
+  { to: '/authority/predict', label: 'nav.predict', icon: <Waypoints size={15} /> },
   { to: '/authority/map', label: 'nav.map', icon: <MapIcon size={15} /> },
   { to: '/authority/queue', label: 'nav.queue', icon: <ListOrdered size={15} /> },
   { to: '/authority/alerts', label: 'nav.alerts', icon: <Siren size={15} /> },
   { to: '/authority/lab', label: 'nav.lab', icon: <FlaskConical size={15} /> },
+  { to: '/data', label: 'nav.data', icon: <Database size={15} /> },
 ]
 
 /* Screens are added to the navigation only once they are actually implemented —
@@ -72,7 +78,7 @@ export function DataHonestyBanner() {
       >
         <AlertTriangle size={12} aria-hidden />
         {t('app.demoBanner')}
-        <ChevronsRight size={12} className={clsx('transition-transform', open && 'rotate-90')} aria-hidden />
+        <ChevronsRight size={12} className={clsxRot(open)} aria-hidden />
       </button>
       {open && (
         <p className="mx-auto max-w-4xl px-4 pb-2 text-center text-[11px] leading-relaxed text-moderate/90">
@@ -83,27 +89,35 @@ export function DataHonestyBanner() {
   )
 }
 
+function clsxRot(open: boolean) {
+  return open ? 'transition-transform rotate-90' : 'transition-transform'
+}
+
 function ConnectionPill() {
   const { connected, transport } = useLive()
   if (connected && transport === 'sse') {
-    return (
-      <Chip tone="good" icon={<Radio size={10} />} title="Live server-sent event stream connected">
-        Live
-      </Chip>
-    )
+    return <StatusPip tone="good" label="MESH:OK" ping className="hidden sm:inline-flex" />
   }
   if (connected && transport === 'polling') {
     return (
-      <Chip tone="warn" icon={<Wifi size={10} />} title="Event stream unavailable — polling every 5 seconds instead">
-        Polling
-      </Chip>
+      <StatusPip tone="warn" label="POLLING" className="hidden sm:inline-flex" />
     )
   }
-  return (
-    <Chip tone="danger" icon={<WifiOff size={10} />} title="No connection to the PEHRA server">
-      Disconnected
-    </Chip>
-  )
+  return <StatusPip tone="danger" label="OFFLINE" ping />
+}
+
+/** Highest active threat across the network — the red "CRIT-L3" pill. */
+function ThreatLevelPill() {
+  const { data } = useApi(() => api.overview(), { pollMs: 15000 })
+  if (!data) return null
+  const m = data.metrics
+  if (m.critical_zones > 0) {
+    return <StatusPip tone="danger" label={`CRIT ×${m.critical_zones}`} ping />
+  }
+  if (m.high_zones > 0) {
+    return <StatusPip tone="warn" label={`HIGH ×${m.high_zones}`} />
+  }
+  return <StatusPip tone="good" label="ALL CLEAR" />
 }
 
 function SimulationClock() {
@@ -111,10 +125,10 @@ function SimulationClock() {
   if (!data) return <div className="skeleton h-5 w-40" />
   const pct = data.total_ticks ? Math.round(((data.tick ?? 0) / data.total_ticks) * 100) : 0
   return (
-    <div className="hidden items-center gap-2 md:flex" title={data.narrative ?? undefined}>
+    <div className="hidden items-center gap-2 xl:flex" title={data.narrative ?? undefined}>
       <Gauge size={13} className="text-ink-400" aria-hidden />
       <span className="text-xs text-ink-300">
-        <span className="font-medium text-ink-100">{data.scenario_name ?? data.scenario_id}</span>
+        <span className="font-head font-semibold text-ink-100">{data.scenario_name ?? data.scenario_id}</span>
         <span className="mx-1.5 text-ink-600">·</span>
         <span className="font-mono">
           T{data.tick}/{data.total_ticks}
@@ -149,15 +163,33 @@ function LangSwitch() {
           type="button"
           onClick={() => setLang(l)}
           aria-pressed={lang === l}
-          className={clsx(
-            'px-2 py-1 text-[11px] font-medium uppercase transition-colors',
-            lang === l ? 'bg-accent/25 text-accent-bright' : 'text-ink-400 hover:bg-ink-800',
-          )}
+          className={clsxLang(l === lang)}
         >
           {l === 'en' ? 'EN' : 'हि'}
         </button>
       ))}
     </div>
+  )
+}
+
+function clsxLang(active: boolean) {
+  return `px-2 py-1 font-mono text-[11px] font-semibold uppercase transition-colors ${
+    active ? 'bg-accent/25 text-accent-bright' : 'text-ink-400 hover:bg-ink-800'
+  }`
+}
+
+function ThemeToggle() {
+  const { theme, toggle } = useTheme()
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+      className="grid h-7 w-7 place-items-center rounded-md border border-ink-600 text-ink-300 transition-colors hover:bg-ink-800 hover:text-accent-bright"
+    >
+      {theme === 'dark' ? <Sun size={14} aria-hidden /> : <Moon size={14} aria-hidden />}
+    </button>
   )
 }
 
@@ -204,47 +236,63 @@ export function ResetDemoButton() {
 
 /* -------------------------------------------------------------------------- */
 
+const SECTION_TITLES: Record<string, string> = {
+  '/authority': 'Command Overview',
+  '/authority/sitrep': 'Sitrep // Command & Map',
+  '/authority/predict': 'Predict // Telemetry Feed',
+  '/authority/map': 'Command & Map',
+  '/authority/queue': 'Priority Queue',
+  '/authority/alerts': 'Alerts Console',
+  '/authority/lab': 'Simulation Lab',
+  '/data': 'Data Sources',
+  '/citizen': 'Village Defense',
+  '/citizen/evacuate': 'Evacuate',
+}
+
 export function AppShell({ children, nav = 'authority' }: { children: ReactNode; nav?: 'authority' | 'none' }) {
   const { user, signOut } = useAuth()
   const { t } = useI18n()
   const location = useLocation()
   const items = nav === 'authority' ? AUTHORITY_NAV.filter((i) => !i.roles || (user && i.roles.includes(user.role))) : []
+  const sectionTitle = SECTION_TITLES[location.pathname] ?? 'Command & Map'
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-ink-950">
       <DataHonestyBanner />
 
-      <header className="flex shrink-0 items-center gap-3 border-b border-ink-700/60 bg-ink-900 px-3 py-2">
-        <NavLink to="/" className="flex items-center gap-2">
-          <span className="grid h-7 w-7 place-items-center rounded-md bg-accent/20 text-accent-bright">
-            <Activity size={16} aria-hidden />
-          </span>
-          <span className="leading-none">
-            <span className="block text-sm font-bold tracking-tight text-ink-50">PEHRA</span>
-            <span className="hidden text-[10px] text-ink-500 sm:block">Hyperlocal early warning</span>
+      <header className="flex shrink-0 items-center gap-3 border-b border-ink-700/60 bg-ink-900/95 px-3 py-2 backdrop-blur">
+        <NavLink to="/" className="flex min-w-0 items-center gap-2.5">
+          <PeHraLogo size={34} />
+          <span className="hidden min-w-0 leading-none sm:block">
+            <span className="flex items-baseline gap-1.5">
+              <span className="font-head text-sm font-extrabold tracking-[0.12em] text-ink-50 uppercase">PEHRA</span>
+              <span className="font-mono text-[11px] font-semibold tracking-[0.2em] text-accent-bright">//OPS</span>
+            </span>
+            <span className="mt-0.5 block truncate font-mono text-[10px] tracking-[0.08em] text-ink-400 uppercase">
+              {sectionTitle}
+            </span>
           </span>
         </NavLink>
 
-        <div className="mx-2 hidden h-6 w-px bg-ink-700 md:block" />
+        <div className="mx-1 hidden h-6 w-px bg-ink-700 md:block" />
         <SimulationClock />
 
         <div className="ml-auto flex items-center gap-2">
           <ConnectionPill />
+          <ThreatLevelPill />
           <LangSwitch />
+          <ThemeToggle />
           <ResetDemoButton />
           {user ? (
             <div className="flex items-center gap-2 border-l border-ink-700 pl-2">
               <div className="hidden text-right sm:block">
                 <div className="text-xs leading-tight font-medium text-ink-100">{user.full_name}</div>
-                <div className="text-[10px] text-ink-500 capitalize">{user.role}</div>
+                <div className="font-mono text-[10px] text-ink-500 uppercase">{user.role}</div>
               </div>
               <Button size="sm" variant="ghost" icon={<LogOut size={13} />} onClick={signOut} title={t('action.signOut')} />
             </div>
           ) : (
-            <NavLink
-              to="/login"
-              className="rounded-md border border-ink-600 px-2 py-1 text-xs text-ink-200 hover:bg-ink-800"
-            >
+            <NavLink to="/login" className="rounded-md border border-ink-600 px-2 py-1 text-xs text-ink-200 hover:bg-ink-800">
               {t('action.signIn')}
             </NavLink>
           )}
@@ -253,17 +301,18 @@ export function AppShell({ children, nav = 'authority' }: { children: ReactNode;
 
       <div className="flex min-h-0 flex-1">
         {items.length > 0 && (
-          <nav className="hidden w-48 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-ink-700/60 bg-ink-900/60 p-2 lg:flex">
+          <nav className="hidden w-52 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-ink-700/60 bg-ink-900/60 p-2 lg:flex">
             {items.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 end={item.to === '/authority'}
                 className={({ isActive }) =>
-                  clsx(
-                    'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium transition-colors',
-                    isActive ? 'bg-accent/15 text-accent-bright' : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100',
-                  )
+                  `flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium transition-colors ${
+                    isActive
+                      ? 'bg-accent/15 text-accent-bright'
+                      : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100'
+                  }`
                 }
               >
                 {item.icon}
@@ -273,9 +322,7 @@ export function AppShell({ children, nav = 'authority' }: { children: ReactNode;
           </nav>
         )}
 
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto" key={location.pathname}>
-          {children}
-        </main>
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</main>
       </div>
 
       {/* compact nav for narrow screens */}
@@ -287,10 +334,9 @@ export function AppShell({ children, nav = 'authority' }: { children: ReactNode;
               to={item.to}
               end={item.to === '/authority'}
               className={({ isActive }) =>
-                clsx(
-                  'flex shrink-0 flex-col items-center gap-0.5 rounded-md px-2.5 py-1 text-[10px]',
-                  isActive ? 'bg-accent/15 text-accent-bright' : 'text-ink-400',
-                )
+                `flex shrink-0 flex-col items-center gap-0.5 rounded-md px-2.5 py-1 text-[10px] ${
+                  isActive ? 'bg-accent/15 text-accent-bright' : 'text-ink-400'
+                }`
               }
             >
               {item.icon}
@@ -307,8 +353,9 @@ export function FullPageLoader({ label = 'Starting PEHRA…' }: { label?: string
   return (
     <div className="grid h-full place-items-center bg-ink-950">
       <div className="flex flex-col items-center gap-3 text-ink-400">
+        <PeHraLogo size={44} />
         <Spinner size={22} />
-        <p className="text-xs">{label}</p>
+        <p className="font-mono text-xs">{label}</p>
       </div>
     </div>
   )

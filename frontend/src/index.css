@@ -1,40 +1,84 @@
 @import 'tailwindcss';
 
 /* ==========================================================================
-   PEHRA design tokens
+   PEHRA design system — "Mission Tactical Intelligence" (Stitch export)
 
-   Severity colours mirror app/core/risk_config.py RISK_LEVELS exactly. The UI
-   must never invent a colour the engine does not know about, and severity is
-   NEVER communicated by colour alone -- every badge carries a label, an icon
-   and an ASCII/pattern marker so it survives colour-blindness, greyscale
-   printing and screen readers (Section 34).
+   Dark operational cockpit is the default (engineered for low-light command
+   rooms); a light "daylight console" theme is derived from the same token
+   names so every component restyles for free.
+
+   Two rules are structural, not cosmetic:
+   1. Severity is NEVER colour-only: every badge carries a label, an icon,
+      an ASCII marker and a colour-blind texture (Section 34). The severity
+      hues below mirror the engine's RISK_LEVELS.
+   2. Absent data is stated, never zero-filled (Sections 62, 63).
    ========================================================================== */
+
 @theme {
-  --color-ink-950: #0b1017;
-  --color-ink-900: #10161f;
-  --color-ink-850: #151d28;
-  --color-ink-800: #1b2531;
-  --color-ink-700: #26303e;
-  --color-ink-600: #38455a;
-  --color-ink-500: #5b6b83;
-  --color-ink-400: #8496ae;
-  --color-ink-300: #adbccd;
-  --color-ink-200: #d3dde8;
-  --color-ink-100: #e9eff5;
-  --color-ink-50: #f5f8fb;
+  /* Structural surfaces — ink-950 is the deepest canvas, ink-50 the
+     lightest surface in dark mode. In light mode the VALUES flip roles are
+     preserved: every step keeps its role (surface vs text) in both themes. */
+  --color-ink-950: #020f1b;
+  --color-ink-900: #061520;
+  --color-ink-850: #0e1d29;
+  --color-ink-800: #12212d;
+  --color-ink-700: #1d2b38;
+  --color-ink-600: #283643;
+  --color-ink-500: #46586a;
+  --color-ink-400: #7e94a6;
+  --color-ink-300: #bbc9cd;
+  --color-ink-200: #d5e4f5;
+  --color-ink-100: #e8f1fb;
+  --color-ink-50: #f6fafd;
 
-  --color-safe: #1f7a4d;
-  --color-low: #3f7fbf;
-  --color-moderate: #c98a17;
-  --color-high: #d1600f;
-  --color-critical: #b3161c;
+  /* Telemetry & navigation accents */
+  --color-accent: #22d3ee;
+  --color-accent-bright: #8aebff;
+  --color-secondary: #adc6ff;
 
-  --color-accent: #2f7fd1;
-  --color-accent-bright: #4d9ff0;
+  /* Semantic risk scale — matches backend RISK_LEVELS (5 bands) */
+  --color-safe: #22c55e;
+  --color-low: #3b82f6;
+  --color-moderate: #f5b942;
+  --color-high: #f97316;
+  --color-critical: #ef4444;
 
+  /* Fonts: Plus Jakarta Sans (headlines), Inter (body), JetBrains Mono
+     (telemetry, timestamps, identifiers). */
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --font-head: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+/* --------------------------------------------------------------------------
+   Light theme (daylight console) — same token names, inverted values
+   -------------------------------------------------------------------------- */
+[data-theme='light'] {
+  color-scheme: light;
+
+  --color-ink-950: #e6edf4;
+  --color-ink-900: #f7fafc;
+  --color-ink-850: #eef3f8;
+  --color-ink-800: #e3ebf2;
+  --color-ink-700: #d3dfeb;
+  --color-ink-600: #b7c7d6;
+  --color-ink-500: #91a4b5;
+  --color-ink-400: #64798d;
+  --color-ink-300: #465c70;
+  --color-ink-200: #31445a;
+  --color-ink-100: #223447;
+  --color-ink-50: #111f2e;
+
+  --color-accent: #0891b2;
+  --color-accent-bright: #0e7490;
+  --color-secondary: #4f46e5;
+
+  --color-safe: #15803d;
+  --color-low: #2563eb;
+  --color-moderate: #b45309;
+  --color-high: #c2410c;
+  --color-critical: #dc2626;
 }
 
 /* --------------------------------------------------------------------------
@@ -42,11 +86,16 @@
    -------------------------------------------------------------------------- */
 :root {
   color-scheme: dark;
-  --sev-safe: #1f7a4d;
-  --sev-low: #3f7fbf;
-  --sev-moderate: #c98a17;
-  --sev-high: #d1600f;
-  --sev-critical: #b3161c;
+  /* CSS vars for inline styles (badges, bars) that must follow the theme. */
+  --sev-safe: var(--color-safe);
+  --sev-low: var(--color-low);
+  --sev-moderate: var(--color-moderate);
+  --sev-high: var(--color-high);
+  --sev-critical: var(--color-critical);
+  --panel-inset: inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+}
+[data-theme='light'] {
+  --panel-inset: inset 0 1px 0 0 rgb(255 255 255 / 0.7);
 }
 
 * {
@@ -72,12 +121,13 @@ body {
 
 /* Visible focus for every interactive element (Section 34). */
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--color-accent-bright);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
   border-radius: 4px;
 }
 
-/* Respect reduced-motion preferences. */
+/* Respect reduced-motion preferences (Framer Motion also honours this via
+   MotionConfig reducedMotion="user"). */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -92,20 +142,42 @@ body {
 /* --------------------------------------------------------------------------
    Utilities
    -------------------------------------------------------------------------- */
+
+/** Level-1 docked structural panel: 1px precision stroke, no ambient shadow. */
 @utility panel {
   background: var(--color-ink-900);
   border: 1px solid color-mix(in oklab, var(--color-ink-600) 50%, transparent);
-  border-radius: 0.75rem;
+  border-radius: 0.5rem;
+  box-shadow: var(--panel-inset);
 }
 
 @utility panel-tight {
   background: var(--color-ink-850);
   border: 1px solid color-mix(in oklab, var(--color-ink-600) 45%, transparent);
-  border-radius: 0.5rem;
+  border-radius: 0.375rem;
 }
 
 @utility hairline {
   border-color: color-mix(in oklab, var(--color-ink-600) 50%, transparent);
+}
+
+/** JetBrains Mono technical tag: 10px, tracking +0.08em, uppercase. */
+@utility hud-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/** Mono telemetry readout, 11px. */
+@utility hud-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.02em;
 }
 
 /* Colour-blind-safe severity fills: each level also carries a distinct
@@ -118,22 +190,14 @@ body {
   background-size: 6px 6px;
 }
 .sev-pattern-diagonal {
-  background-image: repeating-linear-gradient(
-    45deg,
-    currentColor 0 1.5px,
-    transparent 1.5px 6px
-  );
+  background-image: repeating-linear-gradient(45deg, currentColor 0 1.5px, transparent 1.5px 6px);
 }
 .sev-pattern-cross {
   background-image: repeating-linear-gradient(45deg, currentColor 0 1.5px, transparent 1.5px 7px),
     repeating-linear-gradient(-45deg, currentColor 0 1.5px, transparent 1.5px 7px);
 }
 .sev-pattern-hatch {
-  background-image: repeating-linear-gradient(
-    90deg,
-    currentColor 0 2px,
-    transparent 2px 5px
-  );
+  background-image: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 5px);
 }
 
 /* Scrollbars */
@@ -145,12 +209,12 @@ body {
   background: var(--color-ink-950);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-ink-700);
+  background: var(--color-ink-600);
   border-radius: 6px;
   border: 2px solid var(--color-ink-950);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-ink-600);
+  background: var(--color-ink-500);
 }
 
 /* Skeleton shimmer for honest loading states (never fake numbers). */
@@ -163,12 +227,7 @@ body {
   }
 }
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--color-ink-800) 25%,
-    var(--color-ink-700) 37%,
-    var(--color-ink-800) 63%
-  );
+  background: linear-gradient(90deg, var(--color-ink-800) 25%, var(--color-ink-700) 37%, var(--color-ink-800) 63%);
   background-size: 200% 100%;
   animation: pehra-shimmer 1.4s ease-in-out infinite;
   border-radius: 4px;
@@ -189,33 +248,44 @@ body {
   animation: pehra-pulse-ring 2s ease-out infinite;
 }
 
-/* Leaflet dark treatment + attribution legibility */
+/* Critical status lighting: focused optical glow instead of heavy shadows. */
+.glow-critical {
+  box-shadow: 0 0 12px 0 color-mix(in oklab, var(--sev-critical) 35%, transparent);
+}
+.glow-ai {
+  box-shadow: 0 0 12px 0 color-mix(in oklab, var(--color-accent) 30%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   Leaflet — the GIS canvas stays a dark tactical surface in BOTH themes
+   (like a real ops workstation where the map monitor never changes).
+   -------------------------------------------------------------------------- */
 .leaflet-container {
-  background: #0d141c;
+  background: #061019;
   font-family: var(--font-sans);
 }
 .leaflet-control-attribution {
-  background: rgba(11, 16, 23, 0.82) !important;
-  color: var(--color-ink-400) !important;
+  background: rgba(2, 15, 27, 0.82) !important;
+  color: #7e94a6 !important;
   font-size: 10px !important;
 }
 .leaflet-control-attribution a {
-  color: var(--color-ink-300) !important;
+  color: #bbc9cd !important;
 }
 .leaflet-bar a {
-  background: var(--color-ink-800) !important;
-  color: var(--color-ink-100) !important;
-  border-color: var(--color-ink-600) !important;
+  background: #12212d !important;
+  color: #e8f1fb !important;
+  border-color: #283643 !important;
 }
 .leaflet-bar a:hover {
-  background: var(--color-ink-700) !important;
+  background: #1d2b38 !important;
 }
 .leaflet-tooltip {
-  background: var(--color-ink-900) !important;
-  border: 1px solid var(--color-ink-600) !important;
-  color: var(--color-ink-100) !important;
+  background: #0e1d29 !important;
+  border: 1px solid #283643 !important;
+  color: #e8f1fb !important;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.45) !important;
 }
 .leaflet-tooltip-top::before {
-  border-top-color: var(--color-ink-600) !important;
+  border-top-color: #283643 !important;
 }

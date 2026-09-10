@@ -104,6 +104,64 @@ describe('authority command centre', () => {
   }, 20000)
 })
 
+describe('new tactical screens', () => {
+  it.runIf(apiUp)('renders the sitrep command screen', async () => {
+    setToken(await login())
+    renderAt('/authority/sitrep')
+    await waitFor(() => expect(screen.getByText(/Tactical Vectors/i)).toBeInTheDocument(), {
+      timeout: 20000,
+    })
+    await waitFor(() => expect(screen.getAllByText(/SITREP/i).length).toBeGreaterThan(0))
+    expect(screen.getByText(/Active Incident Feed/i)).toBeInTheDocument()
+    expectNoCrash()
+  }, 40000)
+
+  it.runIf(apiUp)('renders the real-time telemetry feed', async () => {
+    renderAt('/authority/predict')
+    await waitFor(() => expect(screen.getByText(/Atmospheric Ingest/i)).toBeInTheDocument(), {
+      timeout: 20000,
+    })
+    await waitFor(() => expect(screen.getByText(/Time-To-Crest Forecast/i)).toBeInTheDocument())
+    expect(screen.getByText(/Model Certainty/i)).toBeInTheDocument()
+    expectNoCrash()
+  }, 40000)
+
+  it.runIf(apiUp)('renders the data sources page with the dataset roadmap', async () => {
+    renderAt('/data')
+    await waitFor(() => expect(screen.getByText(/Dataset Resources/i)).toBeInTheDocument(), {
+      timeout: 20000,
+    })
+    await waitFor(() => expect(screen.getByText(/IMD — India Meteorological Department/i)).toBeInTheDocument())
+    expect(screen.getAllByText(/SIMULATED/i).length).toBeGreaterThan(0)
+    expectNoCrash()
+  }, 40000)
+})
+
+describe('citizen app', () => {
+  it.runIf(apiUp)('renders the village defense screen for a citizen account', async () => {
+    setToken(await login('citizen', 'citizen123'))
+    renderAt('/citizen')
+    await waitFor(() => expect(screen.getByText(/Village Defense/i)).toBeInTheDocument(), {
+      timeout: 20000,
+    })
+    // zone + shelter + checklist chrome
+    await waitFor(() => expect(screen.getByText(/Evacuation Readiness Checklist/i)).toBeInTheDocument())
+    expect(screen.getByText('OFFLINE-FIRST')).toBeInTheDocument()
+    expectNoCrash()
+  }, 40000)
+
+  it.runIf(apiUp)('renders the evacuation screen with the T-minus header', async () => {
+    renderAt('/citizen/evacuate')
+    await waitFor(
+      () =>
+        expect(screen.getByText(/CRITICAL NOTICE|No evacuation required/i)).toBeInTheDocument(),
+      { timeout: 20000 },
+    )
+    await waitFor(() => expect(screen.getByText(/NEAREST SAFE HAVEN|No evacuation required/i)).toBeInTheDocument())
+    expectNoCrash()
+  }, 40000)
+})
+
 describe('unauthenticated access', () => {
   it.runIf(apiUp)('sends a signed-out visitor to the login screen', async () => {
     setToken(null)

@@ -1,5 +1,5 @@
 /**
- * Shared presentational primitives.
+ * Shared presentational primitives — "Mission Tactical Intelligence" skin.
  *
  * Two rules enforced here:
  *  - Severity is never colour-only: every badge carries label + icon + ASCII
@@ -18,9 +18,39 @@ import {
   TriangleAlert,
   WifiOff,
 } from 'lucide-react'
+import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
-import { SEVERITY_COLOR, SEVERITY_PATTERN, clsx, withAlpha } from '../lib/format'
+import { SEVERITY_PATTERN, SEVERITY_VAR, clsx } from '../lib/format'
 import type { SeverityKey } from '../lib/types'
+
+/* -------------------------------------------------------------------------- */
+/* Brand                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/** PEHRA radar mark + wordmark (inline SVG — no external assets). */
+export function PeHraLogo({ size = 36, withWordmark = false, className }: { size?: number; withWordmark?: boolean; className?: string }) {
+  return (
+    <span className={clsx('inline-flex items-center', className)}>
+      <svg width={size} height={(size * 48) / 40} viewBox="0 0 160 48" fill="none" aria-hidden role="img">
+        <rect width="40" height="40" x="4" y="4" rx="10" fill="var(--color-ink-900)" stroke="var(--color-accent)" strokeWidth="1.5" strokeOpacity="0.6" />
+        <circle cx="24" cy="24" r="12" stroke="var(--color-accent)" strokeWidth="1.5" strokeDasharray="2 3" opacity="0.8" />
+        <polygon points="24,14 31,27 17,27" fill="var(--color-accent)" fillOpacity="0.3" stroke="var(--color-accent)" strokeWidth="1.5" />
+        <circle cx="24" cy="24" r="3.5" fill="var(--color-critical)" />
+        <path d="M12 24 H15 M33 24 H36 M24 12 V15 M24 33 V36" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" />
+        {withWordmark && (
+          <>
+            <text x="54" y="28" fill="var(--color-ink-100)" fontFamily="'Plus Jakarta Sans', 'Inter', sans-serif" fontSize="20" fontWeight="800" letterSpacing="2">
+              PEHRA
+            </text>
+            <text x="55" y="38" fill="var(--color-accent)" fontFamily="'JetBrains Mono', monospace" fontSize="7.5" fontWeight="600" letterSpacing="1">
+              PREDICTIVE RISK AI
+            </text>
+          </>
+        )}
+      </svg>
+    </span>
+  )
+}
 
 /* -------------------------------------------------------------------------- */
 /* Severity                                                                    */
@@ -56,7 +86,7 @@ export function SeverityBadge({
   showAscii?: boolean
   className?: string
 }) {
-  const color = SEVERITY_COLOR[level] ?? SEVERITY_COLOR.LOW
+  const color = SEVERITY_VAR[level] ?? SEVERITY_VAR.LOW
   const Icon = SEVERITY_ICON[level] ?? Info
   const sizes = {
     sm: 'text-[10px] px-1.5 py-0.5 gap-1',
@@ -67,25 +97,25 @@ export function SeverityBadge({
   return (
     <span
       className={clsx(
-        'inline-flex items-center rounded-md font-semibold tracking-wide uppercase',
+        'inline-flex items-center rounded font-mono font-semibold tracking-wide uppercase',
         sizes,
         className,
       )}
       style={{
         color,
-        backgroundColor: withAlpha(color, 0.14),
-        border: `1px solid ${withAlpha(color, 0.5)}`,
+        backgroundColor: `color-mix(in srgb, ${color} 13%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`,
       }}
       title={`${label ?? level}${score !== undefined ? ` — ${score.toFixed(0)}/100` : ''}`}
     >
       <Icon size={iconSize} aria-hidden />
       <span>{label ?? level}</span>
       {showAscii && (
-        <span aria-hidden className="opacity-70 font-mono not-italic">
+        <span aria-hidden className="opacity-70 not-italic">
           {SEVERITY_ASCII[level]}
         </span>
       )}
-      {score !== undefined && <span className="font-mono opacity-90">{score.toFixed(0)}</span>}
+      {score !== undefined && <span className="opacity-90">{score.toFixed(0)}</span>}
     </span>
   )
 }
@@ -104,7 +134,7 @@ export function SeverityBar({
   className?: string
   showTicks?: boolean
 }) {
-  const color = SEVERITY_COLOR[level] ?? SEVERITY_COLOR.LOW
+  const color = SEVERITY_VAR[level] ?? SEVERITY_VAR.LOW
   const pattern = SEVERITY_PATTERN[level] ?? 'solid'
   return (
     <div className={clsx('relative w-full', className)}>
@@ -117,12 +147,14 @@ export function SeverityBar({
         aria-valuemax={100}
         aria-label={`Risk ${Math.round(value)} of 100, ${level}`}
       >
-        <div
-          className={clsx('h-full rounded-full transition-[width] duration-500', `sev-pattern-${pattern}`)}
+        <motion.div
+          className={clsx('h-full rounded-full', `sev-pattern-${pattern}`)}
+          initial={{ width: 0 }}
+          animate={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
           style={{
-            width: `${Math.max(0, Math.min(100, value))}%`,
             backgroundColor: color,
-            color: withAlpha('#000000', 0.35),
+            color: 'rgb(0 0 0 / 0.35)',
           }}
         />
       </div>
@@ -169,7 +201,7 @@ export function Panel({
       {(title || actions) && (
         <header className="flex items-start justify-between gap-3 border-b border-ink-700/50 px-4 py-3">
           <div className="min-w-0">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-ink-100">
+            <h2 className="flex items-center gap-2 font-head text-sm font-bold tracking-tight text-ink-100">
               {icon}
               <span className="truncate">{title}</span>
             </h2>
@@ -180,6 +212,134 @@ export function Panel({
       )}
       <div className={clsx('min-h-0 flex-1', dense ? 'p-0' : 'p-4', bodyClassName)}>{children}</div>
     </section>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* HUD atoms                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/** Pulsing status dot + mono label, the "//OPS" header pills. */
+export function StatusPip({
+  tone,
+  label,
+  ping = false,
+  className,
+}: {
+  tone: 'good' | 'warn' | 'danger' | 'info'
+  label: ReactNode
+  ping?: boolean
+  className?: string
+}) {
+  const dot = {
+    good: 'bg-safe',
+    warn: 'bg-moderate',
+    danger: 'bg-critical',
+    info: 'bg-accent',
+  }[tone]
+  const text = {
+    good: 'text-safe',
+    warn: 'text-moderate',
+    danger: 'text-critical',
+    info: 'text-accent-bright',
+  }[tone]
+  return (
+    <span
+      className={clsx(
+        'inline-flex items-center gap-1.5 rounded border border-ink-600 bg-ink-800/70 px-1.5 py-0.5',
+        className,
+      )}
+    >
+      <span className="relative flex h-1.5 w-1.5">
+        {ping && <span className={clsx('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', dot)} />}
+        <span className={clsx('relative inline-flex h-1.5 w-1.5 rounded-full', dot)} />
+      </span>
+      <span className={clsx('hud-label', text)}>{label}</span>
+    </span>
+  )
+}
+
+/** Metric tile from the design system: label-caps header + mono value + track. */
+export function MetricCard({
+  label,
+  value,
+  unit,
+  sub,
+  subTone,
+  track,
+  trackTone = 'var(--color-accent)',
+  icon,
+  className,
+}: {
+  label: string
+  value: ReactNode
+  unit?: ReactNode
+  sub?: ReactNode
+  subTone?: string
+  track?: number
+  trackTone?: string
+  icon?: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={clsx('panel-tight relative flex flex-col overflow-hidden p-3', className)}>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="hud-label truncate text-ink-400">{label}</span>
+        <span className="shrink-0 text-ink-400">{icon}</span>
+      </div>
+      <div className="mb-0.5 flex items-baseline gap-1 font-mono text-xl font-semibold text-ink-100">
+        <span>{value}</span>
+        {unit && <span className="font-hud text-[11px] font-normal text-ink-400">{unit}</span>}
+      </div>
+      {sub && (
+        <div className="mb-1.5 flex items-center justify-between gap-2 font-hud text-ink-400" style={subTone ? { color: subTone } : undefined}>
+          <span className="truncate">{sub}</span>
+        </div>
+      )}
+      {track !== undefined && (
+        <div className="h-1 w-full overflow-hidden rounded-full bg-ink-700">
+          <motion.div
+            className="h-full rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${Math.max(0, Math.min(100, track))}%` }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            style={{ backgroundColor: trackTone }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Segmented stepped confidence gauge (10 ticks), cyan → red as risk grows. */
+export function SegmentedGauge({
+  value,
+  label,
+  color = 'var(--color-accent)',
+  className,
+}: {
+  value: number
+  label?: string
+  color?: string
+  className?: string
+}) {
+  const filled = Math.round((Math.max(0, Math.min(100, value)) / 100) * 10)
+  return (
+    <div className={clsx('flex items-center gap-2', className)}>
+      <div className="flex flex-1 items-center gap-0.5" role="meter" aria-valuenow={Math.round(value)} aria-valuemin={0} aria-valuemax={100} aria-label={label ?? 'gauge'}>
+        {Array.from({ length: 10 }).map((_, i) => (
+          <motion.span
+            key={i}
+            className="h-1 flex-1 rounded-sm"
+            initial={{ opacity: 0.2 }}
+            animate={{ opacity: i < filled ? 1 : 0.25 }}
+            transition={{ delay: i * 0.04 }}
+            style={{ backgroundColor: i < filled ? color : 'var(--color-ink-700)' }}
+          />
+        ))}
+      </div>
+      {label && <span className="font-hud shrink-0 text-ink-300">{Math.round(value)}%</span>}
+    </div>
   )
 }
 
@@ -219,7 +379,7 @@ export function ErrorBlock({
   return (
     <div
       className={clsx(
-        'rounded-lg border border-critical/40 bg-critical/10 text-ink-100',
+        'rounded-md border border-critical/40 bg-critical/10 text-ink-100',
         compact ? 'px-3 py-2 text-xs' : 'p-4 text-sm',
       )}
       role="alert"
@@ -247,7 +407,7 @@ export function ErrorBlock({
           <button
             type="button"
             onClick={onRetry}
-            className="shrink-0 rounded-md border border-ink-600 px-2 py-1 text-xs text-ink-200 hover:bg-ink-800"
+            className="shrink-0 rounded border border-ink-600 px-2 py-1 text-xs text-ink-200 hover:bg-ink-800"
           >
             <RefreshCw size={11} className="mr-1 inline" aria-hidden />
             Retry
@@ -271,8 +431,8 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
-      <div className="text-ink-600">{icon ?? <CircleHelp size={26} aria-hidden />}</div>
-      <p className="text-sm font-medium text-ink-200">{title}</p>
+      <div className="text-ink-500">{icon ?? <CircleHelp size={26} aria-hidden />}</div>
+      <p className="font-head text-sm font-semibold text-ink-200">{title}</p>
       {detail && <p className="max-w-sm text-xs leading-relaxed text-ink-400">{detail}</p>}
       {action}
     </div>
@@ -295,7 +455,7 @@ export function Unavailable({
   return (
     <span
       className={clsx(
-        'inline-flex items-center gap-1.5 rounded-md border border-dashed border-ink-600 bg-ink-850/60 text-ink-400',
+        'inline-flex items-center gap-1.5 rounded border border-dashed border-ink-600 bg-ink-850/60 text-ink-400',
         compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs',
       )}
       title={reason ?? undefined}
@@ -334,7 +494,7 @@ export function Chip({
   return (
     <span
       className={clsx(
-        'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide',
+        'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider',
         tones,
         className,
       )}
@@ -363,7 +523,7 @@ export function Stat({
 }) {
   return (
     <div className="panel-tight px-3 py-2.5">
-      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-ink-400">
+      <div className="flex items-center gap-1.5 hud-label text-ink-400">
         {icon}
         {label}
       </div>
@@ -406,7 +566,7 @@ export function Button({
 }) {
   const variants = {
     default: 'border-ink-600 bg-ink-800 text-ink-100 hover:bg-ink-700',
-    primary: 'border-accent/60 bg-accent/20 text-accent-bright hover:bg-accent/30',
+    primary: 'border-accent/60 bg-accent/20 text-accent-bright hover:bg-accent/30 glow-ai',
     danger: 'border-critical/60 bg-critical/20 text-critical hover:bg-critical/30',
     success: 'border-safe/60 bg-safe/20 text-safe hover:bg-safe/30',
     ghost: 'border-transparent bg-transparent text-ink-300 hover:bg-ink-800',
@@ -419,7 +579,7 @@ export function Button({
       disabled={disabled || pending}
       title={title}
       className={clsx(
-        'inline-flex items-center justify-center rounded-md border font-medium transition-colors',
+        'inline-flex items-center justify-center rounded-md border font-medium transition-colors active:scale-[0.99]',
         'disabled:cursor-not-allowed disabled:opacity-45',
         variants,
         sizes,
@@ -448,7 +608,7 @@ export function Toggle({
   return (
     <label
       className={clsx(
-        'flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 hover:bg-ink-800/60',
+        'flex cursor-pointer items-start gap-2.5 rounded px-2 py-1.5 hover:bg-ink-800/60',
         disabled && 'cursor-not-allowed opacity-50',
       )}
     >

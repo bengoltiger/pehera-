@@ -56,35 +56,47 @@ export function useApi<T>(
     }
     const controller = new AbortController()
     let cancelled = false
+    let retryTimer: number | undefined
     if (!hasData.current) setLoading(true)
 
-    fetcherRef
-      .current(controller.signal)
-      .then((result) => {
-        if (cancelled) return
-        setData(result)
-        hasData.current = true
-        setError(null)
-        setStale(false)
-        setLastUpdated(Date.now())
-      })
-      .catch((err) => {
-        if (cancelled || (err as Error)?.name === 'AbortError') return
-        const pehraError = err instanceof PehraError ? err : new PehraError(0, {
-          error: 'unknown',
-          message: (err as Error)?.message || 'Unexpected error.',
+    const run = (is429Retry: boolean) => {
+      fetcherRef
+        .current(controller.signal)
+        .then((result) => {
+          if (cancelled) return
+          setData(result)
+          hasData.current = true
+          setError(null)
+          setStale(false)
+          setLastUpdated(Date.now())
         })
-        // Keep showing what we have, but mark it clearly as stale.
-        if (hasData.current) setStale(true)
-        else setData(null)
-        setError(pehraError)
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+        .catch((err) => {
+          if (cancelled || (err as Error)?.name === 'AbortError') return
+          const pehraError = err instanceof PehraError ? err : new PehraError(0, {
+            error: 'unknown',
+            message: (err as Error)?.message || 'Unexpected error.',
+          })
+          // 429 = the server asked us to slow down: back off once, then retry.
+          if (pehraError.status === 429 && !is429Retry) {
+            retryTimer = window.setTimeout(() => {
+              if (!cancelled) run(true)
+            }, 1500)
+            return
+          }
+          // Keep showing what we have, but mark it clearly as stale.
+          if (hasData.current) setStale(true)
+          else setData(null)
+          setError(pehraError)
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    }
+    run(false)
 
     return () => {
       cancelled = true
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer)
       controller.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

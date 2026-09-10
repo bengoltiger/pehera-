@@ -42,6 +42,17 @@ F1 = 1.000; that is fixed and must never be reintroduced.
 
 ---
 
+## Design & themes
+
+The UI follows the **"Mission Tactical Intelligence"** design system
+(`docs/DESIGN.md`, exported from the team's Stitch project): dark operational
+cockpit by default, **light "daylight console" theme** included — toggle from
+the header (or the login screen). Both themes share one token set
+(`frontend/src/index.css`); the GIS map canvas intentionally stays dark in
+both, like a real ops workstation. Fonts: Plus Jakarta Sans (headlines),
+Inter (body), JetBrains Mono (telemetry). Framer Motion drives page and card
+animations and honours `prefers-reduced-motion`.
+
 ## Quick start
 
 Requires Python 3.13+ and Node 20+.
@@ -151,10 +162,15 @@ backend/
   scripts/        train_models.py, api_smoke.py, engine_smoke.py
 frontend/
   src/
-    lib/          typed API client, hooks, i18n, providers
-    components/   UI primitives, app shell, risk detail, map, composer
-    pages/        login + authority command centre
+    lib/          typed API client, hooks (429 backoff), i18n, providers, theme
+    components/   UI primitives, app shell, risk detail, map, radar canvas,
+                  hero map, motion helpers, composer
+    pages/        login, authority command centre (incl. SITREP + Predict),
+                  citizen app (village defense, evacuation, data sources)
     test/         Vitest suites that run against the real API
+docs/
+  DESIGN.md       "Mission Tactical Intelligence" design system (Stitch export)
+  DATASETS.md     production dataset roadmap (25 sources, grouped)
 ```
 
 Provider adapters and risk models are registries: adding a real IMD feed or a new model
@@ -215,14 +231,16 @@ degraded and failure states can be demonstrated rather than described.
 ```bash
 cd backend  && PYTHONPATH=. .venv/bin/python scripts/api_smoke.py     # 57 endpoints
 cd backend  && PYTHONPATH=. .venv/bin/python scripts/engine_smoke.py  # engine invariants
-cd frontend && npm run test                                           # Vitest + jsdom
+cd frontend && npm run test                                           # Vitest + jsdom (11 tests)
 cd frontend && npx tsc -b && npx oxlint                               # types + lint
 ```
 
 The frontend suite renders each route **against the running FastAPI process** instead of
 mocked fixtures — mocks agree with whatever the UI assumes, and that is precisely the
-class of bug (API shape drift) the suite exists to catch. It skips itself with a clear
-message when the backend is not up.
+class of bug (API shape drift) the suite exists to catch. It covers the authority
+command centre, the new SITREP / Predict / data-sources screens, the citizen app
+(both tabs), and unauthenticated redirects. It skips itself with a clear message when
+the backend is not up.
 
 ---
 
@@ -238,12 +256,16 @@ message when the backend is not up.
 * Alert composer with live citizen preview (EN/हिं)
 * Prediction verification, replay and what-if APIs; swappable models with fallback
 * 57 REST endpoints, SSE stream with polling fallback, JWT auth + RBAC, rate limiting
-* Authority UI: overview, hyperlocal map, priority queue, alerts console, simulation lab
+  (the client backs off and retries on 429)
+* Authority UI: overview, **SITREP command & map**, **Predict / real-time telemetry feed**,
+  hyperlocal map, priority queue, alerts console, simulation lab, **data sources**
+* **Citizen app** (village defense + guided evacuation, mobile-first, EN/हिं account
+  aware) wired to the same live engine
+* Light + dark themes, Framer Motion transitions, tactical radar canvas of live cells
 
 **Not built yet**
 
-* Citizen app, judge-demo guided tour, incidents / analytics / replay / system-status /
-  audit screens
+* Judge-demo guided tour, incidents / analytics / replay / system-status / audit screens
 * PWA install + offline caching
 * Backend pytest suite (`backend/tests/` is a stub; smoke scripts cover the API today)
 * `ARCHITECTURE.md`
@@ -252,6 +274,11 @@ message when the backend is not up.
 
 * Simulated data only — see the honesty table above.
 * SQLite and an in-process rate limiter: single-node only, no horizontal scaling.
+  The limiter default is 240 reads/min (`PEHRA_RATE_LIMIT_REQUESTS`); the busy demo
+  box runs 600/min so the command centre and citizen app can poll together.
+* Framer Motion + the new screens take the single-page bundle to ~736 kB raw
+  (219 kB gzip) — fine for the demo; the Next.js migration path (see below) is where
+  route-level code splitting comes back.
 * Map tiles come from OpenStreetMap; when they cannot be reached the app detects it and
   falls back to its own vector basemap drawn from the seeded ward polygons, and says so
   on screen rather than showing a broken grey grid.
