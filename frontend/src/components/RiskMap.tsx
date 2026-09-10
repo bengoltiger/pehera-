@@ -97,14 +97,47 @@ function FitBounds({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
   const done = useRef(false)
   useEffect(() => {
     if (!bounds || done.current) return
-    // A zero-size container (headless/jsdom, or a not-yet-laid-out panel)
-    // makes fitBounds compute a NaN zoom and corrupt every projection, so we
-    // only fit once the map actually has pixels to fit into.
-    const size = map.getSize()
-    if (size.x < 2 || size.y < 2) return
-    map.fitBounds(bounds, { padding: [24, 24] })
-    done.current = true
+    const tryFit = () => {
+      // A zero-size container (headless/jsdom, or a not-yet-laid-out panel)
+      // makes fitBounds compute a NaN zoom and corrupt every projection, so
+      // we only fit once the map actually has pixels to fit into.
+      const size = map.getSize()
+      if (size.x < 2 || size.y < 2) return false
+      map.fitBounds(bounds, { padding: [24, 24] })
+      done.current = true
+      return true
+    }
+    if (tryFit()) return
+    // The container may gain pixels after mount (late layout, a sidebar
+    // toggling). Leaflet fires 'resize' from invalidateSize, so retry then
+    // — without this the map would stay on its default view forever.
+    const onResize = () => {
+      if (tryFit()) {
+        map.off('resize', onResize)
+      }
+    }
+    map.on('resize', onResize)
+    return () => {
+      map.off('resize', onResize)
+    }
   }, [bounds, map])
+  return null
+}
+
+/**
+ * Leaflet's built-in trackResize only watches the WINDOW. When the map's own
+ * container resizes (e.g. the detail sidebar on the map screen toggles), the
+ * map keeps a stale size and every layer renders offset. Keep it in sync.
+ */
+function MapSizeWatcher() {
+  const map = useMap()
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return // jsdom / very old browsers
+    const el = map.getContainer()
+    const ro = new ResizeObserver(() => map.invalidateSize({ pan: false }))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [map])
   return null
 }
 
@@ -194,6 +227,7 @@ export function RiskMap({
       )}
 
       <FitBounds bounds={bounds} />
+      <MapSizeWatcher />
 
       {/* -------------------------------------------------- heat field -- */}
       {toggles.heat && field && (

@@ -510,6 +510,7 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
         type="button"
         whileTap={{ scale: 0.98 }}
         onClick={() => setTracking((t) => !t)}
+        aria-pressed={tracking}
         className="flex h-14 w-full items-center justify-between rounded-lg border border-accent/50 bg-accent/25 px-4 shadow-xl transition-colors hover:bg-accent/35"
       >
         <span className="flex items-center gap-2.5 text-left">
@@ -521,8 +522,35 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
             <span className="font-mono text-[10px] text-ink-200 opacity-80">OFFLINE GPS CACHED &amp; READY</span>
           </span>
         </span>
-        <ChevronRight size={22} className="text-accent-bright" aria-hidden />
+        <ChevronRight
+          size={22}
+          className={clsx('text-accent-bright transition-transform', tracking && 'rotate-90')}
+          aria-hidden
+        />
       </motion.button>
+
+      {/* tracking status — the toggle above must show a real consequence */}
+      {tracking && (
+        <div className="rounded-lg border border-accent/50 bg-accent/10 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 font-mono text-[11px] font-bold tracking-wider text-accent-bright">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute h-2 w-2 animate-ping rounded-full bg-accent opacity-75" />
+                <span className="relative h-2 w-2 rounded-full bg-accent" />
+              </span>
+              TRACKING ACTIVE · SIMULATED GPS LOCK
+            </span>
+            {topShelter && (
+              <span className="font-mono text-[10px] text-ink-300">ETA {walkMinutes(topShelter.distanceKm)} min</span>
+            )}
+          </div>
+          <p className="mt-1 text-[11px] leading-snug text-ink-300">
+            {topShelter
+              ? `ROUTE: ${titleCase(zone?.name ?? 'your zone')} → ${titleCase(topShelter.shelter.name)} · ${topShelter.distanceKm.toFixed(1)} km elevated path. The prototype simulates the GPS lock — no real signal is used.`
+              : 'Acquiring the nearest shelter route…'}
+          </p>
+        </div>
+      )}
 
       {/* radar map card */}
       <div className="flex flex-col overflow-hidden rounded-lg border border-ink-600 shadow-md">
@@ -625,20 +653,28 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
 /* -------------------------------------------------------------------------- */
 
 function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
-  const locationId = user.home_location_id ?? 'loc_sinhagad_road'
+  const homeId = user.home_location_id ?? 'loc_sinhagad_road'
+  const [pickedId, setPickedId] = useState<string | null>(null)
+  const locationId = pickedId ?? homeId
+  const isHome = locationId === homeId
   const risk = useApi(() => api.risk(locationId, { detail: true }), { deps: [locationId] })
   return (
     <div className="flex flex-col gap-3 p-3 pb-6">
-      <HeroMap className="h-[26rem] rounded-lg" selectedLocationId={locationId}>
+      <HeroMap
+        className="h-[26rem] rounded-lg"
+        selectedLocationId={locationId}
+        onSelectLocation={(id) => setPickedId(id)}
+      >
         <div className="pointer-events-none absolute top-2 left-2 z-[500] rounded bg-ink-950/90 px-2 py-1 backdrop-blur-md">
           <span className="font-mono text-[9px] font-bold text-accent-bright">
             HYPERLOCAL VIEW · {titleCase(risk.data?.location?.name ?? 'YOUR ZONE').toUpperCase()}
+            {!isHome && risk.data?.location?.name ? ' · TAPPED WARD' : ''}
           </span>
         </div>
       </HeroMap>
       {risk.data && (
         <div className="rounded-lg border border-ink-600 bg-ink-850 p-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="font-head text-sm font-semibold text-ink-100">{titleCase(risk.data.location.name)}</span>
             <SeverityBadge level={risk.data.risk.severity.key} label={risk.data.risk.severity.label} score={risk.data.risk.overall} size="sm" />
           </div>
@@ -646,10 +682,19 @@ function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
           <p className="mt-2 text-[11px] leading-snug text-ink-400">
             {risk.data.risk.momentum.label}: {risk.data.risk.momentum.note} Confidence {risk.data.risk.confidence.value.toFixed(0)}%.
           </p>
+          {!isHome && (
+            <button
+              type="button"
+              onClick={() => setPickedId(null)}
+              className="mt-2 rounded-md border border-ink-600 px-2 py-1 text-[11px] text-ink-200 transition-colors hover:bg-ink-800"
+            >
+              ← Back to your zone
+            </button>
+          )}
         </div>
       )}
       <p className="font-mono text-[9px] leading-snug text-ink-500 uppercase">
-        Colours + patterns are colour-blind safe. Tap a ward for its assessment.
+        Colours + patterns are colour-blind safe. Tap any ward for its assessment.
       </p>
     </div>
   )

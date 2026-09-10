@@ -68,7 +68,7 @@ export function AlertComposer({
   const [engine, setEngine] = useState<Record<string, unknown> | null>(null)
   const [unavailableReason, setUnavailableReason] = useState<string | null>(null)
 
-  const loadPreview = async () => {
+  const loadPreview = async (force = false) => {
     if (!locationId) return
     setUnavailableReason(null)
     const res = (await preview.run({
@@ -85,7 +85,10 @@ export function AlertComposer({
     const s = res.suggested!
     setSuggested(s)
     setEngine(res.engine ?? null)
-    if (!touched) {
+    // `force` overrides the `touched` flag: the "Reset to engine draft" button
+    // must restore the fields even though the user has already edited them
+    // (a setState above cannot be read from this closure, so force is explicit).
+    if (!touched || force) {
       setMessage(s.message)
       setMessageHi(s.message_hi)
       setActions(s.recommended_actions ?? [])
@@ -337,7 +340,7 @@ export function AlertComposer({
                   <Button variant="ghost" onClick={onClose}>
                     Cancel
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => { setTouched(false); void loadPreview() }}>
+                  <Button size="sm" variant="ghost" onClick={() => { setTouched(false); void loadPreview(true) }}>
                     Reset to engine draft
                   </Button>
                 </div>

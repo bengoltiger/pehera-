@@ -17,7 +17,7 @@ import {
   ShieldQuestion,
   Users,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { AlertComposer } from '../../components/AlertComposer'
 import {
   Button,
@@ -41,18 +41,28 @@ const FILTERS = [
   { key: 'all', label: 'All' },
 ] as const
 
+/** Statuses for which re-dispatching still makes operational sense. A
+    cancelled or expired alert must not be fanned out again. */
+const RESEND_STATUSES = ['issued', 'delivered', 'acknowledged', 'updated', 'escalated']
+
 export default function AlertsPage() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['key']>('active')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [composerOpen, setComposerOpen] = useState(false)
 
   const list = useApi(() => api.alerts({ status: filter, limit: 100 }), { deps: [filter] })
+  // Counted against its own query so the badge is visible from EVERY filter —
+  // counting the filtered list only ever showed it on the pending filter.
+  const pendingTotal = useApi(() => api.alerts({ status: 'recommended', limit: 1 }), {})
   const alerts = list.data?.alerts ?? []
-  const selected = useMemo(
-    () => alerts.find((a) => a.id === selectedId) ?? alerts[0] ?? null,
-    [alerts, selectedId],
-  )
-  const pendingCount = alerts.filter((a) => a.status === 'recommended').length
+  const pendingCount = pendingTotal.data?.total ?? 0
+
+  // Keep the alert the officer acted on in the detail pane even after its
+  // status change makes it drop out of the current filter (otherwise the
+  // pane would jump to a different alert mid-action).
+  const selectedInList = selectedId ? (alerts.find((a) => a.id === selectedId) ?? null) : null
+  const selected: ({ id: string } & Partial<Alert>) | null =
+    selectedInList ?? (selectedId ? { id: selectedId } : alerts[0] ?? null)
 
   return (
     <div className="grid min-h-0 gap-3 p-3 lg:h-full lg:grid-cols-[24rem_1fr] lg:p-4">
@@ -193,19 +203,24 @@ function AlertRow({ alert, selected, onClick }: { alert: Alert; selected: boolea
 
 /* -------------------------------------------------------------------------- */
 
-function AlertDetail({ alert, onChanged }: { alert: Alert; onChanged: () => void }) {
+function AlertDetail({ alert, onChanged }: { alert: { id: string } & Partial<Alert>; onChanged: () => void }) {
   const full = useApi(() => api.alert(alert.id), { deps: [alert.id] })
-  const a = full.data ?? alert
+
+  const issue = useMutation(() => api.issueAlert(alert.id, 'Approved in the command centre.'))
+  const resolve = useMutation(() => api.patchAlert(alert.id, { status: 'resolved', reason: 'Resolved by authority.' }))
+  const cancelAlert = useMutation(() =>
+    api.patchAlert(alert.id, { status: 'cancelled', reason: 'Cancelled by authority.' }),
+  )
+  const redeliver = useMutation(() => api.deliverAlert(alert.id))
+
+  // When the alert has already left the filtered list we only have its id;
+  // wait for the full record instead of rendering half the fields.
+  const a = (full.data ?? (alert.title ? alert : null)) as Alert | null
+  if (!a) return <LoadingBlock rows={8} />
   const color = LEVEL_COLOR[a.level] ?? '#5b6b83'
 
-  const issue = useMutation(() => api.issueAlert(a.id, 'Approved in the command centre.'))
-  const resolve = useMutation(() => api.patchAlert(a.id, { status: 'resolved', reason: 'Resolved by authority.' }))
-  const cancelAlert = useMutation(() =>
-    api.patchAlert(a.id, { status: 'cancelled', reason: 'Cancelled by authority.' }),
-  )
-  const redeliver = useMutation(() => api.deliverAlert(a.id))
-
   const canIssue = ['recommended', 'pending_approval'].includes(a.status)
+  const canResend = RESEND_STATUSES.includes(a.status)
   const canResolve = !['resolved', 'cancelled', 'expired'].includes(a.status)
 
   const after = async (fn: () => Promise<unknown>) => {
@@ -249,7 +264,7 @@ function AlertDetail({ alert, onChanged }: { alert: Alert; onChanged: () => void
                 Approve &amp; issue
               </Button>
             )}
-            {!canIssue && a.status !== 'resolved' && (
+            {canResend && (
               <Button size="sm" icon={<Send size={12} />} pending={redeliver.pending} onClick={() => after(redeliver.run)}>
                 Re-send
               </Button>
