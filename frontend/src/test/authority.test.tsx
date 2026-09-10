@@ -49,9 +49,13 @@ function renderAt(path: string) {
   )
 }
 
-/** Fails the test if React rendered an uncaught-error placeholder. */
-function expectNoCrash() {
-  expect(document.body.textContent).not.toMatch(/Cannot read propert|undefined is not|is not a function/i)
+/** Fails the test if React rendered an uncaught-error placeholder or a whole
+    subtree unmounted (a thrown error with no boundary wipes the DOM).
+    Pass a minLength to also require meaningful content (catches full
+    unmounts on screens that should be rich). */
+function expectNoCrash(minLength = 0) {
+  expect(document.body.textContent).not.toMatch(/Cannot read propert|undefined is not|is not a function|No context provided|useLeafletContext/i)
+  if (minLength > 0) expect(document.body.textContent?.length).toBeGreaterThan(minLength)
 }
 
 describe('authority command centre', () => {
@@ -143,7 +147,12 @@ describe('new tactical screens', () => {
         ).toMatch(/LIVE: OPEN-METEO|LIVE FEED UNREACHABLE — SIMULATED RADAR|CONNECTING TO LIVE ATMOSPHERIC FEED/),
       { timeout: 25000 },
     )
-    expectNoCrash()
+    // Give the live payload time to arrive and the map + wind overlay to
+    // mount, THEN assert the app is still alive — a useMap()-outside-context
+    // crash only happens once the live data renders, after the checks above.
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+    expect(screen.getByText(/Atmospheric Ingest/i)).toBeInTheDocument()
+    expectNoCrash(500)
   }, 40000)
 
 })

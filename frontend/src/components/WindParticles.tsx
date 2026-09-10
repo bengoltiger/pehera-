@@ -26,18 +26,19 @@ interface Particle {
 
 /** Speed (km/h) → streak colour. Blue = calm, teal = breeze, amber = strong, red = dangerous. */
 function speedColor(kmh: number): string {
-  if (kmh < 5) return 'rgba(125, 211, 252, 0.45)'
-  if (kmh < 12) return 'rgba(94, 234, 212, 0.55)'
-  if (kmh < 25) return 'rgba(250, 204, 21, 0.65)'
-  return 'rgba(248, 113, 113, 0.8)'
+  if (kmh < 5) return 'rgba(125, 211, 252, 0.6)'
+  if (kmh < 12) return 'rgba(94, 234, 212, 0.7)'
+  if (kmh < 25) return 'rgba(250, 204, 21, 0.75)'
+  return 'rgba(248, 113, 113, 0.85)'
 }
 
 /**
  * Exaggeration for visual motion. Physical speed at 30 fps is sub-pixel on a
  * city-scale map; wind visualisations conventionally speed particles up.
- * 10 km/h should read as gentle drift, 40+ km/h as an obvious flow.
+ * Tuned so even a 2–3 km/h night breeze reads as visible drift, and 25+ km/h
+ * reads as a clear flow.
  */
-const VISUAL_BOOST = 14
+const VISUAL_BOOST = 42
 
 function sample(field: LiveWindField, lat: number, lng: number): { u: number; v: number } | null {
   const r = (lat - field.origin_lat) / field.step_deg

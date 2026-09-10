@@ -10,7 +10,7 @@
  */
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Circle,
   CircleMarker,
@@ -191,6 +191,7 @@ export function RiskMap({
   selectedCellId,
   onSelectCell,
   route,
+  children,
 }: {
   layers: MapLayers | null
   field: RiskField | null
@@ -204,6 +205,11 @@ export function RiskMap({
   selectedCellId?: string | null
   onSelectCell?: (id: string) => void
   route?: MapRoute | null
+  /**
+   * Rendered INSIDE the MapContainer — anything passed here may safely use
+   * react-leaflet hooks like useMap() (e.g. the WindParticles canvas).
+   */
+  children?: ReactNode
 }) {
   const riskByLocation = useMemo(() => {
     const m = new Map<string, PriorityEntry>()
@@ -500,6 +506,9 @@ export function RiskMap({
             />
           )
         })}
+
+      {/* ------------------------------------------------- inner overlays -- */}
+      {children}
     </MapContainer>
   )
 }

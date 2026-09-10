@@ -203,7 +203,9 @@ export default function Telemetry() {
           <div className="relative h-[26rem]">
             {live.data?.field ? (
               <>
-                {/* the real map: streets, wards, rivers, threat cells, tracks */}
+                {/* the real map: streets, wards, rivers, threat cells, tracks.
+                    WindParticles is a CHILD of RiskMap so it lives inside the
+                    MapContainer and can use the Leaflet context. */}
                 <RiskMap
                   layers={mapLayers.data}
                   field={null}
@@ -213,9 +215,10 @@ export default function Telemetry() {
                   tileUrl={tileUrl}
                   attribution={attribution}
                   selectedLocationId={top?.location_id ?? null}
-                />
-                {/* live god's-eye wind field advected over the basemap */}
-                <WindParticles field={live.data.field} />
+                >
+                  {/* live god's-eye wind field advected over the basemap */}
+                  <WindParticles field={live.data.field} />
+                </RiskMap>
               </>
             ) : live.error ? (
               <div className="grid h-full place-items-center bg-ink-950">
@@ -229,8 +232,8 @@ export default function Telemetry() {
               </div>
             )}
 
-            {/* top status badges */}
-            <div className="absolute top-2 right-2 left-2 z-[500] flex items-center justify-between pointer-events-none">
+            {/* top status badges (pl-12 keeps the map's zoom control clear) */}
+            <div className="absolute top-2 right-2 left-2 z-[500] flex items-center justify-between pointer-events-none pl-12">
               {live.data ? (
                 <span className="flex items-center gap-1.5 rounded bg-ink-950/85 px-2 py-1 backdrop-blur-md">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-safe" aria-hidden />
