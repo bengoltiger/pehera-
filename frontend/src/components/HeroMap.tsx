@@ -5,7 +5,7 @@
  * chips, telemetry ribbons) exactly like the design's map overlays.
  */
 import { useSearchParams } from 'react-router-dom'
-import { MapLegend, RiskMap, useTileAvailability, type MapToggles } from './RiskMap'
+import { MapLegend, RiskMap, useTileAvailability, type MapRoute, type MapToggles } from './RiskMap'
 import { ErrorBlock, Spinner } from './ui'
 import { api } from '../lib/api'
 import { useApi } from '../lib/hooks'
@@ -27,11 +27,13 @@ export function HeroMap({
   className,
   selectedLocationId,
   onSelectLocation,
+  route,
 }: {
   children?: React.ReactNode
   className?: string
   selectedLocationId?: string | null
   onSelectLocation?: (id: string) => void
+  route?: MapRoute | null
 }) {
   const { config } = useEngineConfig()
   const tileUrl = config?.map?.tile_url ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
@@ -64,6 +66,7 @@ export function HeroMap({
             attribution={attribution}
             selectedLocationId={selectedLocationId}
             onSelectLocation={onSelectLocation}
+            route={route}
           />
         </div>
       )}

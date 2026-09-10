@@ -143,6 +143,8 @@ describe('citizen app', () => {
     // when-to-move guidance + live-location card are part of the screen
     await waitFor(() => expect(screen.getAllByText(/When to move/i).length).toBeGreaterThan(0))
     expect(screen.getAllByText(/Live location/i).length).toBeGreaterThan(0)
+    // journey to the nearest shelter with walk time
+    await waitFor(() => expect(screen.getAllByText(/MIN WALK/i).length).toBeGreaterThan(0))
     expectNoCrash()
   }, 40000)
 

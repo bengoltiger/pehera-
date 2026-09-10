@@ -37,6 +37,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { DataHonestyBanner } from '../../components/AppShell'
 import { HeroMap } from '../../components/HeroMap'
+import type { MapRoute } from '../../components/RiskMap'
 import { RadarCanvas } from '../../components/RadarCanvas'
 import { Chip, PeHraLogo, SeverityBadge, SeverityBar, StatusPip } from '../../components/ui'
 import { Rise } from '../../components/anim'
@@ -197,6 +198,27 @@ function LiveLocationCard({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Google-Maps-style journey strip: mode · time · distance · origin label. */
+function JourneyBanner({
+  distanceKm,
+  fromLabel,
+}: {
+  distanceKm: number | null
+  fromLabel: string
+}) {
+  if (distanceKm == null) return null
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md border border-accent/40 bg-accent/12 px-2.5 py-1.5">
+      <Footprints size={14} className="text-accent-bright" aria-hidden />
+      <span className="font-mono text-[12px] font-bold text-accent-bright">
+        {walkMinutes(distanceKm)} MIN WALK
+      </span>
+      <span className="font-mono text-[10px] text-ink-200">· {distanceKm.toFixed(1)} km</span>
+      <span className="font-mono text-[10px] text-ink-400">· from {fromLabel}</span>
     </div>
   )
 }
@@ -454,6 +476,20 @@ function VillageDefense({
     )
   }
 
+  /* Journey: the user (live GPS, or the zone centre when there is no fix)
+     → the nearest shelter, drawn on the map like a nav app. */
+  const journeyFrom: [number, number] | null = fix
+    ? [fix.lat, fix.lng]
+    : zone
+      ? [zone.latitude, zone.longitude]
+      : null
+  const journeyRoute: MapRoute | null =
+    journeyFrom && topShelter
+      ? { from: journeyFrom, to: [topShelter.shelter.lat, topShelter.shelter.lng] }
+      : null
+  const journeyKm = fix ? (shelterFromYouKm ?? null) : topShelter ? topShelter.distanceKm : null
+  const journeyFromLabel = fix ? 'your GPS position' : 'your zone centre'
+
   return (
     <div className="flex flex-col gap-3 p-3 pb-6">
       {/* identity header */}
@@ -563,10 +599,15 @@ function VillageDefense({
         <LiveLocationCard fix={fix} error={gpsError} getting={gpsGetting} nearest={nearest} />
       </Rise>
 
+      {/* journey to the nearest shelter */}
+      <Rise>
+        <JourneyBanner distanceKm={journeyKm} fromLabel={journeyFromLabel} />
+      </Rise>
+
       {/* map card */}
       <Rise>
         <div className="flex flex-col overflow-hidden rounded-lg border border-ink-600 shadow-xl">
-          <HeroMap className="h-64" selectedLocationId={locationId}>
+          <HeroMap className="h-64" selectedLocationId={locationId} route={journeyRoute}>
             <div className="pointer-events-none absolute top-2 left-2 z-[500] flex flex-col gap-1">
               <span className="flex items-center gap-1.5 rounded bg-ink-950/90 px-2 py-1 backdrop-blur-md">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
@@ -586,11 +627,18 @@ function VillageDefense({
               </span>
             </div>
           </HeroMap>
-          <div className="flex items-center justify-between bg-ink-850 px-2.5 py-1.5 font-mono text-[10px]">
+          <div className="flex items-center justify-between gap-2 bg-ink-850 px-2.5 py-1.5 font-mono text-[10px]">
             <span className={alert ? 'text-critical' : 'text-safe'}>
               {alert ? '⚠ WITHIN ALERT GEOFENCE' : '✓ CLEAR OF ACTIVE THREATS'}
             </span>
-            {topShelter && <span className="font-bold text-accent-bright">{titleCase(topShelter.shelter.name).toUpperCase()}</span>}
+            {topShelter && (
+              <span className="min-w-0 truncate text-right font-bold text-accent-bright">
+                {titleCase(topShelter.shelter.name).toUpperCase()}
+                {journeyKm != null && (
+                  <span className="font-normal text-ink-300"> · {walkMinutes(journeyKm)} MIN · {journeyKm.toFixed(1)} KM</span>
+                )}
+              </span>
+            )}
           </div>
         </div>
       </Rise>
@@ -732,6 +780,17 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
   const r = risk.data
   const zone = r?.location
 
+  /* Journey shown on the map while tracking: user → nearest shelter. */
+  const evacFrom: [number, number] | null = fix
+    ? [fix.lat, fix.lng]
+    : r
+      ? [r.location.latitude, r.location.longitude]
+      : null
+  const evacRoute: MapRoute | null =
+    evacFrom && topShelter ? { from: evacFrom, to: [topShelter.shelter.lat, topShelter.shelter.lng] } : null
+  const evacJourneyKm = fix ? (shelterFromYouKm ?? null) : topShelter ? topShelter.distanceKm : null
+  const evacFromLabel = fix ? 'your GPS position' : 'your zone centre'
+
   return (
     <div className="flex flex-col gap-3 p-3 pb-6">
       {/* critical notice */}
@@ -825,42 +884,68 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
       {/* live GPS location — matters most mid-evacuation */}
       <LiveLocationCard fix={fix} error={gpsError} getting={gpsGetting} nearest={nearest} />
 
-      {/* radar map card */}
+      {/* journey to the shelter while tracking */}
+      {tracking && <JourneyBanner distanceKm={evacJourneyKm} fromLabel={evacFromLabel} />}
+
+      {/* radar / journey map card */}
       <div className="flex flex-col overflow-hidden rounded-lg border border-ink-600 shadow-md">
-        <div className="relative">
-          <RadarCanvas cells={threats.data?.threat_cells ?? []} heightClass="aspect-[16/10]" />
-          <div className="pointer-events-none absolute top-2 left-2 flex items-center gap-1.5 rounded bg-ink-950/85 px-2 py-1 backdrop-blur-md">
-            <Compass size={13} className="text-accent-bright" aria-hidden />
-            <span className="font-mono text-[10px] text-ink-100">
-              {zone ? `${zone.latitude.toFixed(5)}N ${zone.longitude.toFixed(5)}E` : '—'}
-            </span>
+        {tracking ? (
+          <div className="relative">
+            <HeroMap
+              className="h-72"
+              selectedLocationId={locationId}
+              route={evacRoute}
+            >
+              <div className="pointer-events-none absolute top-2 left-2 flex items-center gap-1.5 rounded bg-ink-950/85 px-2 py-1 backdrop-blur-md">
+                <Compass size={13} className="text-accent-bright" aria-hidden />
+                <span className="font-mono text-[10px] text-ink-100">
+                  {fix
+                    ? `${fix.lat.toFixed(5)}N ${fix.lng.toFixed(5)}E · GPS`
+                    : zone
+                      ? `${zone.latitude.toFixed(5)}N ${zone.longitude.toFixed(5)}E`
+                      : '—'}
+                </span>
+              </div>
+            </HeroMap>
           </div>
-          {topShelter && (
-            <div className="pointer-events-none absolute top-5 right-5 flex flex-col items-center gap-0.5">
-              <span className="animate-bounce text-accent-bright">⛨</span>
-              <span className="rounded bg-accent px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider text-ink-950 uppercase">
-                {titleCase(topShelter.shelter.name).toUpperCase()} (SAFE)
+        ) : (
+          <div className="relative">
+            <RadarCanvas cells={threats.data?.threat_cells ?? []} heightClass="aspect-[16/10]" />
+            <div className="pointer-events-none absolute top-2 left-2 flex items-center gap-1.5 rounded bg-ink-950/85 px-2 py-1 backdrop-blur-md">
+              <Compass size={13} className="text-accent-bright" aria-hidden />
+              <span className="font-mono text-[10px] text-ink-100">
+                {zone ? `${zone.latitude.toFixed(5)}N ${zone.longitude.toFixed(5)}E` : '—'}
               </span>
             </div>
-          )}
-          <div className="pointer-events-none absolute bottom-8 left-5 flex items-center gap-1.5">
-            <span className="relative flex h-4 w-4 items-center justify-center">
-              <span className="absolute h-4 w-4 animate-ping rounded-full bg-critical/60" />
-              <span className="relative h-2.5 w-2.5 rounded-full bg-critical" />
-            </span>
-            <span className="flex flex-col rounded bg-ink-950/90 px-1.5 py-0.5">
-              <span className="hud-label tracking-wider text-critical">YOU ARE HERE</span>
-              <span className="font-mono text-[9px] text-ink-300">{titleCase(zone?.name ?? 'your zone')}</span>
-            </span>
+            {topShelter && (
+              <div className="pointer-events-none absolute top-5 right-5 flex flex-col items-center gap-0.5">
+                <span className="animate-bounce text-accent-bright">⛨</span>
+                <span className="rounded bg-accent px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider text-ink-950 uppercase">
+                  {titleCase(topShelter.shelter.name).toUpperCase()} (SAFE)
+                </span>
+              </div>
+            )}
+            <div className="pointer-events-none absolute bottom-8 left-5 flex items-center gap-1.5">
+              <span className="relative flex h-4 w-4 items-center justify-center">
+                <span className="absolute h-4 w-4 animate-ping rounded-full bg-critical/60" />
+                <span className="relative h-2.5 w-2.5 rounded-full bg-critical" />
+              </span>
+              <span className="flex flex-col rounded bg-ink-950/90 px-1.5 py-0.5">
+                <span className="hud-label tracking-wider text-critical">YOU ARE HERE</span>
+                <span className="font-mono text-[9px] text-ink-300">{titleCase(zone?.name ?? 'your zone')}</span>
+              </span>
+            </div>
           </div>
-        </div>
+        )}
         <div className="flex items-center justify-between bg-ink-800 px-2.5 py-1.5">
           <span className="flex items-center gap-1.5 font-mono text-[10px] text-ink-300">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-            LIVE CELL TRACKING · 90s CADENCE
+            {tracking ? 'ROUTE TO SHELTER · ESTIMATED WALK' : 'LIVE CELL TRACKING · 90s CADENCE'}
           </span>
           <span className="font-mono text-[10px] text-accent-bright">
-            {topShelter ? `SHELTER ${topShelter.distanceKm.toFixed(1)} KM` : 'NO SHELTER SEED'}
+            {topShelter
+              ? `SHELTER ${topShelter.distanceKm.toFixed(1)} KM${evacJourneyKm != null ? ` · ${walkMinutes(evacJourneyKm)} MIN` : ''}`
+              : 'NO SHELTER SEED'}
           </span>
         </div>
       </div>
@@ -951,12 +1036,36 @@ function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
   const locationId = pickedId ?? homeId
   const isHome = locationId === homeId
   const risk = useApi(() => api.risk(locationId, { detail: true }), { deps: [locationId] })
+  const { fix } = useLiveFix()
+  const shelters = useShelters(locationId)
+  const topShelter = shelters[0]
+
+  /* Journey from the ward on screen (or your live GPS) to its nearest shelter. */
+  const center = risk.data?.location
+  const journeyFrom: [number, number] | null = fix
+    ? [fix.lat, fix.lng]
+    : center
+      ? [center.latitude, center.longitude]
+      : null
+  const journeyRoute: MapRoute | null =
+    journeyFrom && topShelter ? { from: journeyFrom, to: [topShelter.shelter.lat, topShelter.shelter.lng] } : null
+  const journeyKm = fix
+    ? topShelter
+      ? haversineKm(fix.lat, fix.lng, topShelter.shelter.lat, topShelter.shelter.lng)
+      : null
+    : topShelter
+      ? topShelter.distanceKm
+      : null
+  const journeyFromLabel = fix ? 'your GPS position' : 'this area'
+
   return (
     <div className="flex flex-col gap-3 p-3 pb-6">
+      <JourneyBanner distanceKm={journeyKm} fromLabel={journeyFromLabel} />
       <HeroMap
         className="h-[26rem] rounded-lg"
         selectedLocationId={locationId}
         onSelectLocation={(id) => setPickedId(id)}
+        route={journeyRoute}
       >
         <div className="pointer-events-none absolute top-2 left-2 z-[500] rounded bg-ink-950/90 px-2 py-1 backdrop-blur-md">
           <span className="font-mono text-[9px] font-bold text-accent-bright">
@@ -987,7 +1096,8 @@ function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
         </div>
       )}
       <p className="font-mono text-[9px] leading-snug text-ink-500 uppercase">
-        Colours + patterns are colour-blind safe. Tap any ward for its assessment.
+        Colours + patterns are colour-blind safe. Tap any ward for its assessment. The blue route is the
+        estimated walk to the nearest shelter from this area — a straight-line estimate, not a road network.
       </p>
     </div>
   )

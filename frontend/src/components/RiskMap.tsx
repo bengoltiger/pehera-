@@ -152,6 +152,12 @@ export interface MapToggles {
   labels: boolean
 }
 
+/** A journey overlay: user position → destination (nearest shelter). */
+export interface MapRoute {
+  from: [number, number]
+  to: [number, number]
+}
+
 export const DEFAULT_TOGGLES: MapToggles = {
   heat: true,
   zones: true,
@@ -184,6 +190,7 @@ export function RiskMap({
   onSelectLocation,
   selectedCellId,
   onSelectCell,
+  route,
 }: {
   layers: MapLayers | null
   field: RiskField | null
@@ -196,6 +203,7 @@ export function RiskMap({
   onSelectLocation?: (id: string) => void
   selectedCellId?: string | null
   onSelectCell?: (id: string) => void
+  route?: MapRoute | null
 }) {
   const riskByLocation = useMemo(() => {
     const m = new Map<string, PriorityEntry>()
@@ -228,6 +236,36 @@ export function RiskMap({
 
       <FitBounds bounds={bounds} />
       <MapSizeWatcher />
+
+      {/* ---------------------------------------------- journey route -- */}
+      {route && (
+        <Pane name="pehra-route" style={{ zIndex: 420 }}>
+          <Polyline
+            positions={[route.from, route.to]}
+            pathOptions={{ color: '#4d9ff0', weight: 4, opacity: 0.9, dashArray: '10 6' }}
+          />
+          {/* start: the user */}
+          <CircleMarker
+            center={route.from}
+            radius={7}
+            pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#4d9ff0', fillOpacity: 1 }}
+          >
+            <Tooltip direction="top" offset={[0, -8]} opacity={1}>
+              <span className="text-[11px] font-semibold text-ink-50">You are here</span>
+            </Tooltip>
+          </CircleMarker>
+          {/* destination: the shelter */}
+          <CircleMarker
+            center={route.to}
+            radius={7}
+            pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#3fbf8f', fillOpacity: 1 }}
+          >
+            <Tooltip direction="top" offset={[0, -8]} opacity={1}>
+              <span className="text-[11px] font-semibold text-ink-50">Nearest shelter</span>
+            </Tooltip>
+          </CircleMarker>
+        </Pane>
+      )}
 
       {/* -------------------------------------------------- heat field -- */}
       {toggles.heat && field && (
