@@ -167,14 +167,14 @@ function LiveLocationCard({
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5 font-head text-sm font-semibold text-ink-100">
           <Crosshair size={15} className="text-accent-bright" aria-hidden />
-          Live location
+          Your location
         </span>
-        <Chip tone={fix ? 'good' : 'neutral'}>{fix ? 'TRACKING' : 'ALWAYS ON'}</Chip>
+        <Chip tone={fix ? 'good' : 'neutral'}>{fix ? 'FINDING YOU' : 'ON'}</Chip>
       </div>
       {getting && !fix && !error && (
         <p className="flex items-center gap-1.5 text-[11px] text-ink-400">
           <span className="h-1.5 w-1.5 animate-ping rounded-full bg-accent" aria-hidden />
-          Acquiring GPS position — this runs automatically while the app is open.
+          Finding your location — this happens automatically, you do not need to press anything.
         </p>
       )}
       {error && <p className="rounded bg-moderate/10 px-2 py-1 text-[11px] leading-snug text-moderate">{error}</p>}
@@ -186,15 +186,14 @@ function LiveLocationCard({
           </p>
           {nearest.data ? (
             <p className="text-[11px] leading-snug text-ink-300">
-              Nearest monitored zone:{' '}
-              <strong className="text-ink-100">{titleCase(nearest.data.location.name)}</strong> —{' '}
-              {nearest.data.distance_km.toFixed(1)} km away
+              You are in:{' '}
+              <strong className="text-ink-100">{titleCase(nearest.data.location.name)}</strong>
               {nearest.data.within_coverage
-                ? ' · inside engine coverage'
-                : ` · outside coverage${nearest.data.note ? ` (${nearest.data.note})` : ''}`}
+                ? null
+                : ` — this is outside the area we cover${nearest.data.note ? ` (${nearest.data.note})` : ''}`}
             </p>
           ) : (
-            <p className="text-[10px] text-ink-500">Checking nearest monitored zone…</p>
+            <p className="text-[10px] text-ink-500">Checking which area you are in…</p>
           )}
         </div>
       )}
@@ -236,22 +235,22 @@ function moveGuidance(risk: RiskResponse): { tone: 'danger' | 'warn' | 'good' | 
   const rate = risk.risk.momentum.rate_per_hour
   const severity = risk.risk.severity.key
   if (severity === 'CRITICAL') {
-    return { tone: 'danger', text: 'LEAVE NOW — your zone is currently CRITICAL. Head to your designated shelter immediately.' }
+    return { tone: 'danger', text: 'LEAVE NOW. Your area is in danger — go to the shelter right away.' }
   }
   if (lead?.available && lead.seconds != null && lead.seconds <= 30 * 60) {
     const label = lead.label ?? `${Math.round(lead.seconds / 60)} min`
-    return { tone: 'danger', text: `LEAVE NOW — the engine projects a critical crossing in ${label}.` }
+    return { tone: 'danger', text: `LEAVE NOW — danger is expected within ${label}.` }
   }
   if (lead?.available && lead.seconds != null && lead.seconds <= 120 * 60) {
     const label = lead.label ?? 'the next two hours'
-    return { tone: 'warn', text: `BEGIN MOVING — be at your shelter within ${label}.` }
+    return { tone: 'warn', text: `START MOVING — reach the shelter within ${label}.` }
   }
   if (severity === 'HIGH') {
-    return { tone: 'warn', text: 'Prepare to move — your zone is HIGH. Pack and stand ready to evacuate at a moment’s notice.' }
+    return { tone: 'warn', text: 'Get ready to move. Pack your things and be ready to leave quickly.' }
   }
-  if (rate > 1.5) return { tone: 'warn', text: 'Risk is climbing — keep the app open and be ready to move at a moment’s notice.' }
-  if (rate < -1.5) return { tone: 'good', text: 'Risk is falling — no need to move yet. Keep monitoring.' }
-  return { tone: 'info', text: 'Risk is holding steady — keep monitoring. This guidance refreshes with every engine update.' }
+  if (rate > 1.5) return { tone: 'warn', text: 'Danger is rising — keep this app open and stay ready to move.' }
+  if (rate < -1.5) return { tone: 'good', text: 'Danger is going down — no need to move yet. Keep watching.' }
+  return { tone: 'info', text: 'Danger level is steady — keep watching. This updates automatically.' }
 }
 
 function WhenToMoveCard({ risk }: { risk: RiskResponse }) {
@@ -274,7 +273,7 @@ function WhenToMoveCard({ risk }: { risk: RiskResponse }) {
           When to move
         </span>
         <span className={`font-mono text-[10px] font-bold ${toneText}`}>
-          RISK RATE {risk.risk.overall.toFixed(0)}/100
+          DANGER LEVEL {risk.risk.overall.toFixed(0)}/100
         </span>
       </div>
       <p className={`mt-1.5 text-xs font-semibold ${toneText}`}>{g.text}</p>
@@ -292,21 +291,21 @@ function WhenToMoveCard({ risk }: { risk: RiskResponse }) {
         <p className="leading-snug text-ink-400">{mom.note}</p>
         <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
           <span>
-            Projected peak:{' '}
+            Peak danger:{' '}
             {peak?.available && peak.in_minutes != null ? (
               <span className="font-mono text-ink-100">
                 {peak.risk?.toFixed(0)}/100 in {fmtMinutes(peak.in_minutes)}
               </span>
             ) : (
-              <span className="text-ink-500">{peak?.reason_unavailable ?? 'no peak predicted'}</span>
+              <span className="text-ink-500">{peak?.reason_unavailable ?? 'none predicted'}</span>
             )}
           </span>
           <span>
-            Lead time:{' '}
+            Time before danger:{' '}
             {lead?.available && lead.label ? (
               <span className="font-mono text-ink-100">{lead.label}</span>
             ) : (
-              <span className="text-ink-500">no critical crossing predicted</span>
+              <span className="text-ink-500">no danger expected soon</span>
             )}
           </span>
         </div>
@@ -316,10 +315,10 @@ function WhenToMoveCard({ risk }: { risk: RiskResponse }) {
 }
 
 const CHECKLIST = [
-  { id: 'gobag', title: 'Pack Emergency Go-Bag', detail: 'Aadhaar identity cards, bank passbooks, prescription medicine, 3-day dry rations.' },
-  { id: 'livestock', title: 'Safeguard Livestock', detail: 'Untie tethered animals and lead directly along the northern high bund toward community pens.' },
-  { id: 'house', title: 'Secure House & Fresh Well', detail: 'Turn off domestic electrical mains breaker; tightly seal drinking tubewell capping.' },
-  { id: 'path', title: 'Follow Marked GREEN Ridge Path', detail: 'DO NOT use low eastern nullah crossing or bridge under any circumstances.' },
+  { id: 'gobag', title: 'Pack your go-bag', detail: 'Aadhaar and other ID cards, bank passbooks, prescription medicine, 3 days of dry food.' },
+  { id: 'livestock', title: 'Move your animals', detail: 'Untie tethered animals and lead them along the high path toward the community pens.' },
+  { id: 'house', title: 'Make your house safe', detail: 'Turn off the main electric switch and cover the drinking well.' },
+  { id: 'path', title: 'Use only the marked high path', detail: 'Do NOT cross the low eastern drain or the bridge, no matter what.' },
 ]
 
 function useChecklist() {
@@ -351,10 +350,10 @@ function Checklist() {
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5 font-head text-sm font-semibold text-ink-100">
           <Check size={15} className="text-accent-bright" aria-hidden />
-          Evacuation Readiness Checklist
+          Pack these first
         </span>
         <span className={clsx('font-mono text-[11px]', count === CHECKLIST.length ? 'font-bold text-safe' : 'text-accent-bright')}>
-          {count}/{CHECKLIST.length} PACKED
+          {count}/{CHECKLIST.length} DONE
         </span>
       </div>
       <div className="flex flex-col gap-1.5">
@@ -387,13 +386,13 @@ function SosBeacon() {
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5">
           <Siren size={16} className="text-critical" aria-hidden />
-          <span className="hud-label tracking-wider text-critical">EMERGENCY ASSISTANCE</span>
+          <span className="hud-label tracking-wider text-critical">IF YOU ARE IN TROUBLE</span>
         </span>
-        <span className="font-mono text-[10px] text-ink-400">LORA CH-09 · SIMULATED</span>
+        <span className="font-mono text-[10px] text-ink-400">DEMO — NOTHING IS SENT</span>
       </div>
       <p className="text-[11px] leading-snug text-ink-400">
-        Press and hold if trapped, injured, or unable to evacuate autonomously. In the prototype this transmits
-        nothing — it demonstrates the coordinate-beacon workflow.
+        Tap the button if you are trapped, injured, or cannot walk out. In this demo nothing is sent — it shows how
+        the real system would tell the rescue team where you are.
       </p>
       <motion.button
         type="button"
@@ -405,11 +404,11 @@ function SosBeacon() {
         )}
       >
         <Radio size={16} className={sent ? 'animate-ping' : ''} aria-hidden />
-        {sent ? 'BEACON ACTIVE // BROADCASTING (SIMULATED)' : 'TRANSMIT EMERGENCY SOS BEACON'}
+        {sent ? 'HELP REQUESTED (DEMO)' : 'I NEED HELP — SEND MY LOCATION'}
       </motion.button>
       {sent && (
         <p className="rounded bg-ink-950 px-2 py-1 text-center font-mono text-[10px] text-accent-bright">
-          SIMULATED TRANSMISSION: COORDINATES QUEUED TO DISTRICT DISASTER BASE — NO REAL SIGNAL SENT
+          DEMO ONLY: NO REAL SIGNAL WAS SENT. IN THE REAL SYSTEM YOUR LOCATION GOES TO THE RELIEF TEAM.
         </p>
       )}
     </div>
@@ -470,25 +469,19 @@ function VillageDefense({
   if (risk.error || !r) {
     return (
       <div className="p-4">
-        <Chip tone="danger">SIGNAL LOST</Chip>
-        <p className="mt-2 text-xs text-ink-400">{risk.error?.message ?? 'Could not load your zone.'}</p>
+        <Chip tone="danger">No connection</Chip>
+        <p className="mt-2 text-xs text-ink-400">
+          {risk.error?.message ?? 'Could not load your area.'} Showing last saved information where possible.
+        </p>
       </div>
     )
   }
 
-  /* Journey: the user (live GPS, or the zone centre when there is no fix)
-     → the nearest shelter, drawn on the map like a nav app. */
-  const journeyFrom: [number, number] | null = fix
-    ? [fix.lat, fix.lng]
-    : zone
-      ? [zone.latitude, zone.longitude]
-      : null
-  const journeyRoute: MapRoute | null =
-    journeyFrom && topShelter
-      ? { from: journeyFrom, to: [topShelter.shelter.lat, topShelter.shelter.lng] }
-      : null
+  /* Journey: straight-line walk from the user (live GPS, or the zone centre
+     when there is no fix) to the nearest shelter — text on Home; the route
+     itself is drawn on the Map tab and while Evacuate is tracking. */
   const journeyKm = fix ? (shelterFromYouKm ?? null) : topShelter ? topShelter.distanceKm : null
-  const journeyFromLabel = fix ? 'your GPS position' : 'your zone centre'
+  const journeyFromLabel = fix ? 'your location' : 'your area'
 
   return (
     <div className="flex flex-col gap-3 p-3 pb-6">
@@ -500,7 +493,7 @@ function VillageDefense({
               <Waves size={17} className="text-accent-bright" aria-hidden />
               {t('citizen.defense')}
             </span>
-            <Chip tone="info">OFFLINE-FIRST</Chip>
+            <Chip tone="info">WORKS OFFLINE</Chip>
           </div>
           <div className="flex items-center justify-between gap-2 pt-0.5">
             <span
@@ -529,10 +522,10 @@ function VillageDefense({
             </span>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-1.5">
-            <span className="font-mono text-[10px] text-ink-400">
-              POPULATION: {fmtNumber(zone?.population)} CITIZENS
+            <span className="text-[11px] text-ink-400">
+              About {fmtNumber(zone?.population)} people live here
             </span>
-            <Chip tone="info">1–3 KM HYPERLOCAL ZONE</Chip>
+            <Chip tone="info">YOUR LOCAL AREA</Chip>
           </div>
           <div className="mt-1 flex items-center gap-2">
             <SeverityBadge level={r.risk.severity.key} label={r.risk.severity.label} score={r.risk.overall} size="sm" />
@@ -599,47 +592,17 @@ function VillageDefense({
         <LiveLocationCard fix={fix} error={gpsError} getting={gpsGetting} nearest={nearest} />
       </Rise>
 
-      {/* journey to the nearest shelter */}
+      {/* journey to the nearest shelter (text only — the map lives on the
+          Map tab and during Evacuate, so the home screen stays lean for
+          low-network phones: zero tile downloads on the main screen) */}
       <Rise>
-        <JourneyBanner distanceKm={journeyKm} fromLabel={journeyFromLabel} />
-      </Rise>
-
-      {/* map card */}
-      <Rise>
-        <div className="flex flex-col overflow-hidden rounded-lg border border-ink-600 shadow-xl">
-          <HeroMap className="h-64" selectedLocationId={locationId} route={journeyRoute}>
-            <div className="pointer-events-none absolute top-2 left-2 z-[500] flex flex-col gap-1">
-              <span className="flex items-center gap-1.5 rounded bg-ink-950/90 px-2 py-1 backdrop-blur-md">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
-                <span className="font-mono text-[9px] font-bold text-accent-bright">
-                  YOUR ZONE: {titleCase(zone?.name ?? '').toUpperCase()}
-                </span>
-              </span>
-            </div>
-            <div className="pointer-events-none absolute right-2 bottom-2 z-[500] flex items-center gap-2.5 rounded bg-ink-950/90 px-2 py-1 backdrop-blur-md">
-              <span className="flex items-center gap-1">
-                <span className="h-1.5 w-3 rounded-full bg-critical" />
-                <span className="hud-label text-ink-100">Red Zone</span>
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-1 w-3 rounded-full bg-accent" />
-                <span className="hud-label text-accent-bright">Green Path</span>
-              </span>
-            </div>
-          </HeroMap>
-          <div className="flex items-center justify-between gap-2 bg-ink-850 px-2.5 py-1.5 font-mono text-[10px]">
-            <span className={alert ? 'text-critical' : 'text-safe'}>
-              {alert ? '⚠ WITHIN ALERT GEOFENCE' : '✓ CLEAR OF ACTIVE THREATS'}
-            </span>
-            {topShelter && (
-              <span className="min-w-0 truncate text-right font-bold text-accent-bright">
-                {titleCase(topShelter.shelter.name).toUpperCase()}
-                {journeyKm != null && (
-                  <span className="font-normal text-ink-300"> · {walkMinutes(journeyKm)} MIN · {journeyKm.toFixed(1)} KM</span>
-                )}
-              </span>
-            )}
-          </div>
+        <div className="flex flex-col gap-1.5">
+          <JourneyBanner distanceKm={journeyKm} fromLabel={journeyFromLabel} />
+          {alert && (
+            <p className="flex items-center gap-1.5 rounded-md bg-critical/10 px-2.5 py-1.5 font-mono text-[11px] font-bold text-critical">
+              ⚠ You are inside the danger area
+            </p>
+          )}
         </div>
       </Rise>
 
@@ -649,7 +612,7 @@ function VillageDefense({
           <div className="flex flex-col gap-2 rounded-lg border border-ink-600 bg-ink-850 p-3 shadow-md">
             <div className="flex items-start justify-between gap-2">
               <div className="flex flex-col">
-                <span className="hud-label text-accent-bright">DESIGNATED ASSEMBLY DESTINATION</span>
+                <span className="hud-label text-accent-bright">YOUR NEAREST SAFE PLACE</span>
                 <h2 className="font-head text-sm font-bold text-ink-50">{titleCase(topShelter.shelter.name)}</h2>
                 {topShelter.shelter.address && (
                   <p className="mt-0.5 flex items-start gap-1 text-[11px] leading-snug text-ink-300">
@@ -675,7 +638,7 @@ function VillageDefense({
                 className="flex items-center gap-1.5 rounded-md border border-ink-600 px-2 py-1.5 text-[11px] text-accent-bright transition-colors hover:bg-ink-800"
               >
                 <Phone size={12} aria-hidden />
-                Shelter contact: {topShelter.shelter.phone}
+                Call the shelter: {topShelter.shelter.phone}
               </a>
             )}
             <div className="flex items-center justify-between rounded-md bg-ink-900 p-2">
@@ -683,12 +646,12 @@ function VillageDefense({
                 <Footprints size={20} className="text-accent-bright" aria-hidden />
                 <span className="flex flex-col">
                   <span className="font-mono text-xs font-bold text-ink-100">{walkMinutes(topShelter.distanceKm)} MIN WALK</span>
-                  <span className="font-mono text-[9px] text-ink-400">EST. 4.5 KM/H · ELEVATED ROUTE</span>
+                  <span className="font-mono text-[9px] text-ink-400">STRAIGHT-LINE ESTIMATE</span>
                 </span>
               </span>
               {topShelter.shelter.capacity != null && (
                 <span className="font-mono text-[10px] text-accent-bright">
-                  CAP {fmtNumber(topShelter.shelter.capacity)}
+                  SPACE FOR ~{fmtNumber(topShelter.shelter.capacity)}
                 </span>
               )}
             </div>
@@ -699,15 +662,15 @@ function VillageDefense({
               </span>
               <span className="flex items-center gap-1 rounded bg-ink-700 px-1.5 py-0.5">
                 <UserIcon size={11} className="text-secondary" aria-hidden />
-                <span className="hud-label text-ink-100">MEDICAL POINT</span>
+                <span className="hud-label text-ink-100">MEDICAL HELP</span>
               </span>
               <span className="flex items-center gap-1 rounded bg-ink-700 px-1.5 py-0.5">
                 <PersonStanding size={11} className="text-accent-bright" aria-hidden />
-                <span className="hud-label text-ink-100">SHELTER IN PLACE</span>
+                <span className="hud-label text-ink-100">SHELTER</span>
               </span>
             </div>
             <p className="font-mono text-[9px] text-ink-500 uppercase">
-              Distance & time are straight-line estimates for display — the engine does not route.
+              Distance and time are straight-line estimates — not a road map.
             </p>
           </div>
         </Rise>
@@ -721,7 +684,7 @@ function VillageDefense({
         className="glow-ai flex h-14 w-full items-center justify-center gap-2 rounded-lg border border-accent/50 bg-accent/20 font-head text-sm font-bold tracking-[0.1em] text-accent-bright uppercase transition-colors hover:bg-accent/30"
       >
         <Route size={20} aria-hidden />
-        START GUIDED EVACUATION PATH
+        SHOW ME THE WAY TO SAFETY
       </motion.button>
 
       <Checklist />
@@ -732,13 +695,12 @@ function VillageDefense({
           <Wifi size={22} className="mt-0.5 shrink-0 text-accent-bright" aria-hidden />
           <div className="min-w-0 flex flex-col gap-0.5">
             <div className="flex items-center gap-1.5">
-              <span className="font-mono text-xs font-bold text-accent-bright">OFFLINE MESH READY</span>
-              <Chip tone="neutral">SIMULATED</Chip>
+              <span className="font-mono text-xs font-bold text-accent-bright">WORKS WITHOUT INTERNET</span>
+              <Chip tone="neutral">DEMO</Chip>
             </div>
             <p className="text-[11px] leading-snug text-ink-400">
-              The offline-first design caches map tiles, shelter capacities and danger contours so the app keeps
-              working without cellular service. In this prototype the mesh peers are simulated — no relay hardware
-              is attached.
+              The app stores the important information on your phone, so it keeps working when there is no network.
+              The home screen is kept light on purpose so it uses as little data as possible.
             </p>
           </div>
         </div>
@@ -805,13 +767,13 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
         <div className="flex items-start justify-between gap-2">
           <span className="flex items-center gap-2">
             <span className={clsx('h-2.5 w-2.5 rounded-full', alert ? 'animate-ping bg-critical' : 'bg-safe')} />
-            <span className={clsx('hud-label tracking-[0.2em]', alert ? 'text-critical' : 'text-safe')}>
-              {alert ? `CRITICAL NOTICE // ${titleCase(zone?.name ?? 'SECTOR').toUpperCase()}` : 'NOTICE // ALL CLEAR'}
+            <span className={clsx('hud-label tracking-[0.15em]', alert ? 'text-critical' : 'text-safe')}>
+              {alert ? `DANGER — LEAVE NOW · ${titleCase(zone?.name ?? 'YOUR AREA').toUpperCase()}` : 'ALL CLEAR'}
             </span>
           </span>
           {alert && leadSeconds != null && (
             <span className="rounded bg-ink-950/70 px-1.5 py-0.5 font-mono text-[11px] font-bold text-ink-50">
-              T-MINUS {fmtClock(countdown)}
+              TIME LEFT: {fmtClock(countdown)}
             </span>
           )}
         </div>
@@ -824,8 +786,8 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
           <>
             <h1 className="font-head text-lg font-bold tracking-tight text-safe uppercase">No evacuation required</h1>
             <p className="text-xs leading-relaxed text-ink-300">
-              The engine has not projected an alert for your zone in the current scenario. Keep the app open — this
-              screen switches on automatically when a WATCH or higher level is predicted.
+              There is no alert for your area right now. Keep the app open — it will tell you the moment action is
+              needed.
             </p>
           </>
         )}
@@ -846,9 +808,9 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
           <PersonStanding size={26} className="text-accent-bright" aria-hidden />
           <span className="flex flex-col">
             <span className="font-head text-sm font-bold tracking-tight text-ink-50 uppercase">
-              {tracking ? 'TRACKING EVACUATION PATH' : 'START GUIDED EVACUATION'}
+              {tracking ? 'HIDING THE ROUTE' : 'SHOW ME THE WAY TO SAFETY'}
             </span>
-            <span className="font-mono text-[10px] text-ink-200 opacity-80">OFFLINE GPS CACHED &amp; READY</span>
+            <span className="font-mono text-[10px] text-ink-200 opacity-80">WORKS WITHOUT SIGNAL</span>
           </span>
         </span>
         <ChevronRight
@@ -867,7 +829,7 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
                 <span className="absolute h-2 w-2 animate-ping rounded-full bg-accent opacity-75" />
                 <span className="relative h-2 w-2 rounded-full bg-accent" />
               </span>
-              TRACKING ACTIVE · SIMULATED GPS LOCK
+              ROUTE SHOWN
             </span>
             {topShelter && (
               <span className="font-mono text-[10px] text-ink-300">ETA {walkMinutes(topShelter.distanceKm)} min</span>
@@ -875,8 +837,8 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
           </div>
           <p className="mt-1 text-[11px] leading-snug text-ink-300">
             {topShelter
-              ? `ROUTE: ${titleCase(zone?.name ?? 'your zone')} → ${titleCase(topShelter.shelter.name)} · ${topShelter.distanceKm.toFixed(1)} km elevated path. The prototype simulates the GPS lock — no real signal is used.`
-              : 'Acquiring the nearest shelter route…'}
+              ? `Route: ${titleCase(zone?.name ?? 'your area')} → ${titleCase(topShelter.shelter.name)} · ${topShelter.distanceKm.toFixed(1)} km (straight line). Demo: the GPS position is simulated.`
+              : 'Finding the nearest shelter…'}
           </p>
         </div>
       )}
@@ -940,12 +902,12 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
         <div className="flex items-center justify-between bg-ink-800 px-2.5 py-1.5">
           <span className="flex items-center gap-1.5 font-mono text-[10px] text-ink-300">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-            {tracking ? 'ROUTE TO SHELTER · ESTIMATED WALK' : 'LIVE CELL TRACKING · 90s CADENCE'}
+            {tracking ? 'ROUTE TO SHELTER · ESTIMATED WALK' : 'THREAT RADAR (DEMO)'}
           </span>
           <span className="font-mono text-[10px] text-accent-bright">
             {topShelter
-              ? `SHELTER ${topShelter.distanceKm.toFixed(1)} KM${evacJourneyKm != null ? ` · ${walkMinutes(evacJourneyKm)} MIN` : ''}`
-              : 'NO SHELTER SEED'}
+              ? `SHELTER ${topShelter.distanceKm.toFixed(1)} KM${evacJourneyKm != null ? ` · ${walkMinutes(evacJourneyKm)} MIN WALK` : ''}`
+              : 'NO SHELTER FOUND'}
           </span>
         </div>
       </div>
@@ -954,8 +916,8 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
       {topShelter && (
         <div className="flex flex-col gap-2 rounded-lg border border-ink-600 bg-ink-850 p-3 shadow-md">
           <div className="flex items-center justify-between">
-            <span className="hud-label tracking-[0.15em] text-ink-400">NEAREST SAFE HAVEN</span>
-            <Chip tone="good">STATUS: OPEN</Chip>
+            <span className="hud-label tracking-[0.15em] text-ink-400">YOUR NEAREST SAFE PLACE</span>
+            <Chip tone="good">OPEN</Chip>
           </div>
           <div>
             <h2 className="font-head text-base font-bold text-ink-50">{titleCase(topShelter.shelter.name)}</h2>
@@ -969,7 +931,7 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
           </div>
           <div className="mt-0.5 grid grid-cols-2 gap-2">
             <div className="flex flex-col rounded bg-ink-900 p-2">
-              <span className="font-mono text-[9px] text-ink-400 uppercase">DISTANCE (ZONE)</span>
+              <span className="font-mono text-[9px] text-ink-400 uppercase">Distance</span>
               <span className="font-head text-sm font-bold text-ink-100">{topShelter.distanceKm.toFixed(1)} km</span>
               {shelterFromYouKm != null && (
                 <span className="mt-0.5 font-mono text-[9px] font-bold text-safe">
@@ -978,7 +940,7 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
               )}
             </div>
             <div className="flex flex-col rounded bg-ink-900 p-2">
-              <span className="font-mono text-[9px] text-ink-400 uppercase">TRANSIT TIME</span>
+              <span className="font-mono text-[9px] text-ink-400 uppercase">Time to reach</span>
               <span className="font-head text-sm font-bold text-accent-bright">
                 {walkMinutes(topShelter.distanceKm)}m <span className="text-[10px] font-normal text-ink-400">walk</span>
               </span>
@@ -995,7 +957,7 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
           )}
           {topShelter.shelter.capacity != null && (
             <p className="font-mono text-[10px] text-ink-400">
-              SHELTER CAPACITY: {fmtNumber(topShelter.shelter.capacity)} (seeded estimate)
+              Space for about {fmtNumber(topShelter.shelter.capacity)} people
             </p>
           )}
         </div>
@@ -1009,14 +971,14 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
           <Database size={18} className="shrink-0 text-accent-bright" aria-hidden />
           <div className="min-w-0 flex flex-col">
             <span className="hud-label text-ink-400">OFFLINE MAP</span>
-            <span className="font-mono text-[10px] text-ink-100 truncate">CACHED &amp; ACTIVE</span>
+            <span className="font-mono text-[10px] text-ink-100 truncate">WORKING</span>
           </div>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-ink-600 bg-ink-850 p-2.5">
           <Wifi size={18} className="shrink-0 text-accent-bright" aria-hidden />
           <div className="min-w-0 flex flex-col">
-            <span className="hud-label text-ink-400">PEHRA MESH</span>
-            <span className="font-mono text-[10px] text-ink-100 truncate">SIMULATED RELAYS</span>
+            <span className="hud-label text-ink-400">MESH NETWORK</span>
+            <span className="font-mono text-[10px] text-ink-100 truncate">DEMO</span>
           </div>
         </div>
       </div>
@@ -1069,8 +1031,8 @@ function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
       >
         <div className="pointer-events-none absolute top-2 left-2 z-[500] rounded bg-ink-950/90 px-2 py-1 backdrop-blur-md">
           <span className="font-mono text-[9px] font-bold text-accent-bright">
-            HYPERLOCAL VIEW · {titleCase(risk.data?.location?.name ?? 'YOUR ZONE').toUpperCase()}
-            {!isHome && risk.data?.location?.name ? ' · TAPPED WARD' : ''}
+            VIEWING: {titleCase(risk.data?.location?.name ?? 'YOUR AREA').toUpperCase()}
+            {!isHome && risk.data?.location?.name ? ' · TAPPED AREA' : ''}
           </span>
         </div>
       </HeroMap>
@@ -1082,7 +1044,7 @@ function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
           </div>
           <SeverityBar value={risk.data.risk.overall} level={risk.data.risk.severity.key} height={8} className="mt-2" showTicks />
           <p className="mt-2 text-[11px] leading-snug text-ink-400">
-            {risk.data.risk.momentum.label}: {risk.data.risk.momentum.note} Confidence {risk.data.risk.confidence.value.toFixed(0)}%.
+            Trend: {risk.data.risk.momentum.note} How sure: {risk.data.risk.confidence.value.toFixed(0)}%.
           </p>
           {!isHome && (
             <button
@@ -1090,14 +1052,14 @@ function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
               onClick={() => setPickedId(null)}
               className="mt-2 rounded-md border border-ink-600 px-2 py-1 text-[11px] text-ink-200 transition-colors hover:bg-ink-800"
             >
-              ← Back to your zone
+              ← Back to your area
             </button>
           )}
         </div>
       )}
       <p className="font-mono text-[9px] leading-snug text-ink-500 uppercase">
-        Colours + patterns are colour-blind safe. Tap any ward for its assessment. The blue route is the
-        estimated walk to the nearest shelter from this area — a straight-line estimate, not a road network.
+        Tap any area to see its danger level. The blue route shows the estimated walk to the nearest shelter from
+        this area — a straight-line estimate, not a road map.
       </p>
     </div>
   )
@@ -1110,9 +1072,9 @@ function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
 type Tab = 'home' | 'map' | 'evacuate'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: 'home', label: 'Defense', icon: <Home size={19} aria-hidden /> },
+  { id: 'home', label: 'Home', icon: <Home size={19} aria-hidden /> },
   { id: 'map', label: 'Map', icon: <MapIcon size={19} aria-hidden /> },
-  { id: 'evacuate', label: 'Evacuate', icon: <Siren size={19} aria-hidden /> },
+  { id: 'evacuate', label: 'Safety', icon: <Siren size={19} aria-hidden /> },
 ]
 
 export default function CitizenApp({ initialTab = 'home' }: { initialTab?: Tab }) {
@@ -1141,10 +1103,10 @@ export default function CitizenApp({ initialTab = 'home' }: { initialTab?: Tab }
               <span className="font-mono text-[10px] font-semibold tracking-[0.18em] text-accent-bright">//VILLAGE</span>
             </span>
             <span className="mt-0.5 block truncate font-mono text-[9px] tracking-[0.06em] text-ink-400 uppercase">
-              {user?.full_name ?? 'citizen'} · {user?.home_location_id ?? 'no zone set'}
+              {user?.full_name ?? 'citizen'}
             </span>
           </span>
-          <StatusPip tone={connected ? 'good' : 'danger'} label={connected ? 'MESH:OK' : 'OFFLINE'} ping={!connected} />
+          <StatusPip tone={connected ? 'good' : 'danger'} label={connected ? 'ONLINE' : 'OFFLINE'} ping={!connected} />
           <button
             type="button"
             onClick={toggle}

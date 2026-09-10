@@ -21,6 +21,14 @@ const apiUp = await fetch(`${API_BASE}/api/health`)
   .catch(() => false)
 if (!apiUp) console.warn(`[pehra] backend not reachable at ${API_BASE}; API tests skipped`)
 
+/* Probed at collection time: the live-weather test only runs when the
+   Open-Meteo provider is actually reachable from this machine — an
+   unreachable provider is an honest skip, not a fake green. */
+const liveUp = await fetch(`${API_BASE}/api/live/weather?lat=18.56&lng=73.26&grid=0`)
+  .then((r) => r.ok)
+  .catch(() => false)
+if (apiUp && !liveUp) console.warn('[pehra] Open-Meteo unreachable; live-weather test skipped')
+
 async function login(username = 'authority', password = 'authority123') {
   const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: 'POST',
@@ -118,13 +126,23 @@ describe('new tactical screens', () => {
     expectNoCrash()
   }, 40000)
 
-  it.runIf(apiUp)('renders the real-time telemetry feed', async () => {
+  it.runIf(apiUp)('renders the real-time telemetry feed with a live atmosphere card', async () => {
     renderAt('/authority/predict')
     await waitFor(() => expect(screen.getByText(/Atmospheric Ingest/i)).toBeInTheDocument(), {
       timeout: 20000,
     })
     await waitFor(() => expect(screen.getByText(/Time-To-Crest Forecast/i)).toBeInTheDocument())
     expect(screen.getByText(/Model Certainty/i)).toBeInTheDocument()
+    // The atmosphere card must show either the LIVE Open-Meteo badge, an
+    // honest "live feed unreachable — simulated" fallback, or its loading
+    // state — never a blank card.
+    await waitFor(
+      () =>
+        expect(
+          document.body.textContent,
+        ).toMatch(/LIVE: OPEN-METEO|LIVE FEED UNREACHABLE — SIMULATED RADAR|CONNECTING TO LIVE ATMOSPHERIC FEED/),
+      { timeout: 25000 },
+    )
     expectNoCrash()
   }, 40000)
 
@@ -137,12 +155,12 @@ describe('citizen app', () => {
     await waitFor(() => expect(screen.getByText(/Village Defense/i)).toBeInTheDocument(), {
       timeout: 20000,
     })
-    // zone + shelter + checklist chrome
-    await waitFor(() => expect(screen.getByText(/Evacuation Readiness Checklist/i)).toBeInTheDocument())
-    expect(screen.getByText('OFFLINE-FIRST')).toBeInTheDocument()
+    // zone + shelter + checklist chrome (plain-language copy for non-technical users)
+    await waitFor(() => expect(screen.getByText(/Pack these first/i)).toBeInTheDocument())
+    expect(screen.getByText('WORKS OFFLINE')).toBeInTheDocument()
     // when-to-move guidance + live-location card are part of the screen
     await waitFor(() => expect(screen.getAllByText(/When to move/i).length).toBeGreaterThan(0))
-    expect(screen.getAllByText(/Live location/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Your location/i).length).toBeGreaterThan(0)
     // journey to the nearest shelter with walk time
     await waitFor(() => expect(screen.getAllByText(/MIN WALK/i).length).toBeGreaterThan(0))
     expectNoCrash()
@@ -152,12 +170,30 @@ describe('citizen app', () => {
     renderAt('/citizen/evacuate')
     await waitFor(
       () =>
-        expect(screen.getByText(/CRITICAL NOTICE|No evacuation required/i)).toBeInTheDocument(),
+        expect(screen.getByText(/DANGER — LEAVE NOW|No evacuation required/i)).toBeInTheDocument(),
       { timeout: 20000 },
     )
-    await waitFor(() => expect(screen.getByText(/NEAREST SAFE HAVEN|No evacuation required/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/YOUR NEAREST SAFE PLACE|No evacuation required/i)).toBeInTheDocument())
     expectNoCrash()
   }, 40000)
+})
+
+describe('live external weather', () => {
+  it.runIf(apiUp && liveUp)('serves real Open-Meteo point data + a 12×12 wind field', async () => {
+    const res = await fetch(`${API_BASE}/api/live/weather?lat=18.56&lng=73.26&grid=1`)
+    expect(res.ok).toBe(true)
+    const d = await res.json()
+    expect(d.provider).toBe('open-meteo')
+    expect(typeof d.fetched_at).toBe('string')
+    expect(d.point.temperature_c).toBeGreaterThan(-30)
+    expect(d.point.temperature_c).toBeLessThan(60)
+    expect(d.point.next_3h_rain_mm).toBeGreaterThanOrEqual(0)
+    expect(Array.isArray(d.field.u)).toBe(true)
+    expect(d.field.u.length).toBe(144)
+    expect(d.field.v.length).toBe(144)
+    expect(d.field.rows).toBe(12)
+    expect(d.field.cols).toBe(12)
+  }, 30000)
 })
 
 describe('role-scoped navigation', () => {

@@ -20,6 +20,7 @@ import type {
   ForecastEntry,
   Health,
   Lang,
+  LiveWeather,
   LocationSummary,
   MapLayers,
   ModelInfo,
@@ -294,6 +295,10 @@ export const api = {
     }),
   recentEvents: (limit = 20) =>
     request<{ events: Record<string, unknown>[]; subscribers: number }>(`/api/events/recent${qs({ limit })}`),
+
+  /* ---- live external data --------------------------------------------- */
+  liveWeather: (lat: number, lng: number, grid = 1) =>
+    request<LiveWeather>(`/api/live/weather${qs({ lat, lng, grid })}`),
 
   /* ---- analytics ------------------------------------------------------- */
   overview: () => request<Overview>('/api/overview'),

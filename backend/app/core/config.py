@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     map_tile_url: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
     map_attribution: str = "© OpenStreetMap contributors"
 
+    # --- live external data (Predict screen) ---
+    # Open-Meteo: free, no API key. Override to test with a mock or mirror.
+    open_meteo_url: str = "https://api.open-meteo.com/v1/forecast"
+
     # --- CORS ---
     cors_origins: List[str] = ["*"]
 

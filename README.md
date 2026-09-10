@@ -18,10 +18,18 @@ a named input, with its source, age and quality. The UI computes no risk of its 
 ## ⚠️ Data honesty (read this first)
 
 **No live observation network is connected to this prototype.** Every environmental
-value — rainfall, river level, soil moisture, wind, forecasts — comes from deterministic
-simulated scenarios in `backend/app/simulation/`. This is stated in the app itself on
-every screen, in every API response (`data_mode.is_simulated: true`) and in every
-server-sent event.
+value the *engine* consumes — rainfall, river level, soil moisture, wind, forecasts —
+comes from deterministic simulated scenarios in `backend/app/simulation/`. This is
+stated in the app itself on every screen, in every API response
+(`data_mode.is_simulated: true`) and in every server-sent event.
+
+The one external, real-time exception: the **Predict screen's atmosphere card** ingests
+**live weather from Open-Meteo** (free, no API key) through a small server-side proxy
+(`GET /api/live/weather`, 10-minute cache) and renders a real map with a live wind
+particle field ("god's-eye view", canvas-2D — no WebGL, no new dependency). Those
+measurements are labelled LIVE, the engine's simulated inputs are labelled ENGINE/SIM,
+and if the provider is unreachable the card falls back to the simulated radar and says
+so instead of pretending.
 
 What that means concretely:
 
@@ -30,7 +38,8 @@ What that means concretely:
 | Risk engine, explanations, confidence, priority ranking | **Real code, real computation** |
 | Alert decision engine, escalation, lifecycle, audit trail | **Real** |
 | Prediction-vs-actual verification and skill scores | **Real computation, over simulated events** |
-| Environmental observations and forecasts | **Simulated** — deterministic scenarios |
+| Environmental observations and forecasts fed to the engine | **Simulated** — deterministic scenarios |
+| Atmosphere card on the Predict screen | **Real live data** — Open-Meteo (temperature, wind field, rain), labelled LIVE |
 | Push / SMS / e-mail delivery | **Simulated** — every record is prefixed `SIMULATED DELIVERY`, nothing leaves the machine |
 | Population and infrastructure figures | **Demo estimates**, not census data |
 | Accuracy against real weather events | **Never claimed** — the models are trained on simulated data and the app says so |
@@ -255,8 +264,11 @@ up.
   simulated multi-channel delivery, acknowledgement funnel
 * Alert composer with live citizen preview (EN/हिं)
 * Prediction verification, replay and what-if APIs; swappable models with fallback
-* 57 REST endpoints, SSE stream with polling fallback, JWT auth + RBAC, rate limiting
+* 60 REST endpoints, SSE stream with polling fallback, JWT auth + RBAC, rate limiting
   (the client backs off and retries on 429)
+* **Live external weather** (Open-Meteo, no API key) on the Predict screen: a
+  server-side cached proxy (`/api/live/weather`) + a canvas-2D wind particle
+  "god's-eye view" over a real map, with an honest simulated-radar fallback
 * Authority UI: overview, **SITREP command & map**, **Predict / real-time telemetry feed**,
   hyperlocal map, priority queue, alerts console, simulation lab
 * **Citizen app** (village defense + guided evacuation, mobile-first, EN/हिं account aware)
@@ -276,7 +288,7 @@ up.
 * SQLite and an in-process rate limiter: single-node only, no horizontal scaling.
   The limiter default is 240 reads/min (`PEHRA_RATE_LIMIT_REQUESTS`); the busy demo
   box runs 600/min so the command centre and citizen app can poll together.
-* Framer Motion + the new screens take the single-page bundle to ~736 kB raw
+* Framer Motion + the new screens take the single-page bundle to ~740 kB raw
   (219 kB gzip) — fine for the demo; the Next.js migration path (see below) is where
   route-level code splitting comes back.
 * Map tiles come from OpenStreetMap; when they cannot be reached the app detects it and

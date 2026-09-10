@@ -563,6 +563,49 @@ export interface Metrics {
   n: number
 }
 
+/* ---- live external weather (Predict screen) ---------------------------- */
+
+export interface LiveWeatherHour {
+  time: string
+  precip_mm: number | null
+  wind_kmh: number | null
+  wind_dir_deg: number | null
+}
+
+export interface LiveWeatherPoint {
+  time: string | null
+  temperature_c: number | null
+  humidity_pct: number | null
+  wind_speed_kmh: number | null
+  wind_direction_deg: number | null
+  precipitation_mm: number | null
+  cloud_cover_pct: number | null
+  next_3h_rain_mm: number | null
+  next_12h: LiveWeatherHour[]
+}
+
+export interface LiveWindField {
+  origin_lat: number
+  origin_lng: number
+  step_deg: number
+  rows: number
+  cols: number
+  /** row-major flat arrays, km/h (u = eastward, v = northward) */
+  u: number[]
+  v: number[]
+  hour: string | null
+}
+
+export interface LiveWeather {
+  provider: string
+  provider_url: string
+  fetched_at: string
+  ttl_seconds: number
+  point: LiveWeatherPoint
+  field: LiveWindField | null
+  note: string
+}
+
 export interface InfrastructureItem {
   id: string
   name: string

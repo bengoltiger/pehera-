@@ -1,10 +1,17 @@
 /**
  * Predict — "Real-Time Telemetry Feed" (Atmospheric Ingest & Runoff Model).
  *
- * The radar plots live tracked threat cells; the timeline, lead time,
- * confidence and vector metrics are the engine's real values for the
- * current top-priority zone. The scrubber only interpolates between those
- * engine horizons — it never invents a forecast.
+ * The atmosphere card shows a REAL map (OSM tiles / local vector fallback)
+ * with live wind particles advected through the Open-Meteo u/v field — a
+ * god's-eye view of the actual sky over the top-priority zone. The ribbon,
+ * rainfall vector and lead-time values mix LIVE external measurements
+ * (Open-Meteo) with the engine's runoff model; every simulated value is
+ * labelled as such. If the live provider is unreachable the card honestly
+ * falls back to the simulated radar and says so.
+ *
+ * The timeline, confidence and vector metrics are the engine's real values
+ * for the current top-priority zone. The scrubber only interpolates between
+ * those engine horizons — it never invents a forecast.
  */
 import {
   CloudFog,
@@ -23,12 +30,20 @@ import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
 import { Page, Rise, Stagger } from '../../components/anim'
 import { RadarCanvas } from '../../components/RadarCanvas'
+import { RiskMap, useTileAvailability } from '../../components/RiskMap'
+import { WindParticles } from '../../components/WindParticles'
 import { Chip, MetricCard, Panel, SegmentedGauge, StatusPip, Unavailable } from '../../components/ui'
 import { api } from '../../lib/api'
 import { LEVEL_VAR, fmtNumber, relativeTime, titleCase } from '../../lib/format'
 import { useApi } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
+import { useEngineConfig } from '../../lib/providers'
 import type { Alert, TimelineEntry } from '../../lib/types'
+
+const COMPASS_16 = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
+/** Meteorological direction (wind blows FROM `deg`). */
+const compassFromDeg = (deg: number | null | undefined) =>
+  deg == null || !Number.isFinite(deg) ? '—' : COMPASS_16[((Math.round(deg / 22.5) % 16) + 16) % 16]
 
 function lerpTimeline(entries: TimelineEntry[], minutes: number): { risk: number | null; confidence: number | null; low: number | null; high: number | null } {
   const pts = entries.filter((e) => e.available && e.risk != null)
@@ -101,17 +116,35 @@ function EscalationStage({ alerts }: { alerts: Alert[] }) {
 
 export default function Telemetry() {
   const { t } = useI18n()
+  const { config } = useEngineConfig()
+  const tileUrl = config?.map?.tile_url ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+  const attribution = config?.map?.attribution ?? '© OpenStreetMap contributors'
+  const tileStatus = useTileAvailability(tileUrl)
+
   const overview = useApi(() => api.overview())
   const threats = useApi(() => api.threats())
   const alerts = useApi(() => api.alerts({ limit: 10 }))
   const models = useApi(() => api.models())
   const sim = useApi(() => api.simState())
+  const mapLayers = useApi(() => api.mapLayers(), { liveUpdate: false })
 
   const top = overview.data?.priority_queue?.[0]
   const risk = useApi((s) => api.risk(top!.location_id, { detail: true, lang: 'en' }, s), {
     enabled: !!top,
     deps: [top?.location_id, overview.data?.generated_at],
   })
+
+  // LIVE external atmosphere over the top zone. Server-side Open-Meteo proxy
+  // (10-min cache) → one small request even for a 144-point wind grid.
+  const live = useApi(
+    (s) => api.liveWeather(risk.data!.location.latitude, risk.data!.location.longitude, 1),
+    {
+      enabled: !!risk.data?.location && risk.data.location.latitude != null,
+      liveUpdate: false,
+      deps: [risk.data?.location?.latitude, risk.data?.location?.longitude],
+    },
+  )
+  const livePoint = live.data?.point ?? null
 
   const [scrub, setScrub] = useState(0)
   const entries = risk.data?.timeline ?? []
@@ -136,6 +169,7 @@ export default function Telemetry() {
   const river = r?.inputs?.river_level
   const conf = r?.risk.confidence
   const zone = r?.location
+  const liveRain3h = livePoint?.next_3h_rain_mm ?? null
 
   return (
     <Page className="mx-auto max-w-4xl p-4">
@@ -144,9 +178,15 @@ export default function Telemetry() {
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 animate-ping rounded-full bg-accent" />
           <span className="hud-label tracking-[0.25em] text-accent-bright">REAL-TIME TELEMETRY FEED</span>
-          <Chip tone="sim" className="ml-auto">
-            {t('label.simulated')} FEED
-          </Chip>
+          {live.data ? (
+            <Chip tone="good" className="ml-auto">
+              LIVE EXTERNAL FEED
+            </Chip>
+          ) : (
+            <Chip tone="sim" className="ml-auto">
+              {t('label.simulated')} FEED
+            </Chip>
+          )}
         </div>
         <h1 className="font-head text-2xl font-bold tracking-tight text-ink-50 uppercase">
           Atmospheric Ingest &amp; Runoff Model
@@ -157,17 +197,55 @@ export default function Telemetry() {
         </p>
       </div>
 
-      {/* -------------------------------------------------------- radar card -- */}
+      {/* ------------------------------------------------- atmosphere card -- */}
       <Rise>
         <div className="relative mb-3 overflow-hidden rounded-lg border border-ink-600 bg-ink-950 shadow-xl">
-          <div className="relative">
-            <RadarCanvas cells={cells} />
+          <div className="relative h-[26rem]">
+            {live.data?.field ? (
+              <>
+                {/* the real map: streets, wards, rivers, threat cells, tracks */}
+                <RiskMap
+                  layers={mapLayers.data}
+                  field={null}
+                  queue={overview.data?.priority_queue ?? []}
+                  toggles={{ heat: false, zones: true, threats: true, tracks: true, infrastructure: false, rivers: true, alerts: true, labels: true }}
+                  tileStatus={tileStatus}
+                  tileUrl={tileUrl}
+                  attribution={attribution}
+                  selectedLocationId={top?.location_id ?? null}
+                />
+                {/* live god's-eye wind field advected over the basemap */}
+                <WindParticles field={live.data.field} />
+              </>
+            ) : live.error ? (
+              <div className="grid h-full place-items-center bg-ink-950">
+                <div className="w-full">
+                  <RadarCanvas cells={cells} />
+                </div>
+              </div>
+            ) : (
+              <div className="grid h-full place-items-center">
+                <span className="font-mono text-xs text-ink-400">CONNECTING TO LIVE ATMOSPHERIC FEED…</span>
+              </div>
+            )}
+
             {/* top status badges */}
-            <div className="absolute top-2 right-2 left-2 flex items-center justify-between pointer-events-none">
-              <span className="flex items-center gap-1.5 rounded bg-ink-950/85 px-2 py-1 backdrop-blur-md">
-                <RadarIcon size={13} className="text-accent-bright" aria-hidden />
-                <span className="font-mono text-[11px] text-ink-100">INGEST: DEMO PROVIDERS</span>
-              </span>
+            <div className="absolute top-2 right-2 left-2 z-[500] flex items-center justify-between pointer-events-none">
+              {live.data ? (
+                <span className="flex items-center gap-1.5 rounded bg-ink-950/85 px-2 py-1 backdrop-blur-md">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-safe" aria-hidden />
+                  <span className="font-mono text-[11px] text-safe">
+                    LIVE: OPEN-METEO · {livePoint?.time ? livePoint.time.slice(11, 16) : '--:--'} LOCAL
+                  </span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 rounded bg-ink-950/85 px-2 py-1 backdrop-blur-md">
+                  <RadarIcon size={13} className="text-accent-bright" aria-hidden />
+                  <span className="font-mono text-[11px] text-ink-100">
+                    {live.error ? 'LIVE FEED UNREACHABLE — SIMULATED RADAR' : 'ACQUIRING LIVE FEED…'}
+                  </span>
+                </span>
+              )}
               <span className="flex items-center gap-1.5 rounded bg-critical/25 px-2 py-1 backdrop-blur-md">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-critical" />
                 <span className="hud-label text-ink-100">
@@ -175,13 +253,34 @@ export default function Telemetry() {
                 </span>
               </span>
             </div>
+
+            {/* wind legend (live only) */}
+            {live.data?.field && (
+              <div className="absolute bottom-2 left-2 z-[500] rounded-md bg-ink-950/85 px-2 py-1.5 backdrop-blur-md pointer-events-none">
+                <div className="hud-label mb-1 text-ink-300">
+                  LIVE WIND FIELD · {live.data.field.hour ? `${live.data.field.hour.slice(11, 16)} LOCAL` : '—'}
+                </div>
+                <div
+                  className="h-1.5 w-32 rounded-full"
+                  style={{ background: 'linear-gradient(90deg, #7dd3fc, #5eead4, #facc15, #f87171)' }}
+                  aria-hidden
+                />
+                <div className="mt-0.5 flex justify-between font-mono text-[8px] text-ink-400">
+                  <span>0</span>
+                  <span>12</span>
+                  <span>25</span>
+                  <span>40+ KM/H</span>
+                </div>
+              </div>
+            )}
+
             {/* floating trajectory chip */}
             {topCell && (
               <motion.div
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
-                className="absolute bottom-10 left-2 flex max-w-[85%] items-center gap-2 rounded-md bg-ink-800/95 p-2 shadow-md backdrop-blur-md"
+                className="absolute bottom-2 right-2 z-[500] flex max-w-[80%] items-center gap-2 rounded-md bg-ink-800/95 p-2 shadow-md backdrop-blur-md"
               >
                 <Zap size={16} className="shrink-0 text-accent-bright" aria-hidden />
                 <div className="min-w-0">
@@ -198,27 +297,50 @@ export default function Telemetry() {
               </motion.div>
             )}
           </div>
-          {/* telemetry sub-ribbon */}
+          {/* telemetry sub-ribbon: live measurements + engine runoff values */}
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-ink-700/60 bg-ink-850 px-2.5 py-1.5 font-mono text-[10px] text-ink-400">
-            <span className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-secondary" />
-              RAIN 3H FORECAST:{' '}
-              <strong className="font-medium text-ink-100">
-                {rain?.value != null ? `${rain.value.toFixed(1)} ${rain.unit}` : '—'}
-              </strong>
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-accent-bright" />
-              RIVER LEVEL:{' '}
-              <strong className="font-medium text-ink-100">{river?.value != null ? `${river.value.toFixed(2)} ${river.unit}` : '—'}</strong>
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-              ALGO:{' '}
-              <strong className="font-medium text-ink-100">
-                {models.data?.active ?? '—'} v{(models.data?.models ?? []).find((m) => m.name === models.data?.active)?.version ?? '1.0'}
-              </strong>
-            </span>
+            {livePoint ? (
+              <>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-safe" />
+                  TEMP: <strong className="font-medium text-ink-100">{livePoint.temperature_c != null ? `${livePoint.temperature_c.toFixed(1)}°C` : '—'}</strong>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-safe" />
+                  WIND: <strong className="font-medium text-ink-100">{livePoint.wind_speed_kmh != null ? `${livePoint.wind_speed_kmh.toFixed(1)} km/h ${compassFromDeg(livePoint.wind_direction_deg)}` : '—'}</strong>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-safe" />
+                  RAIN NOW / 3H: <strong className="font-medium text-ink-100">{livePoint.precipitation_mm != null ? `${livePoint.precipitation_mm.toFixed(1)}mm` : '—'} / {livePoint.next_3h_rain_mm != null ? `${livePoint.next_3h_rain_mm.toFixed(1)}mm` : '—'}</strong>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent-bright" />
+                  RIVER (ENGINE): <strong className="font-medium text-ink-100">{river?.value != null ? `${river.value.toFixed(2)} ${river.unit}` : '—'}</strong>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                  ALGO: <strong className="font-medium text-ink-100">{models.data?.active ?? '—'}</strong>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-secondary" />
+                  RAIN 3H FORECAST:{' '}
+                  <strong className="font-medium text-ink-100">
+                    {rain?.value != null ? `${rain.value.toFixed(1)} ${rain.unit}` : '—'}
+                  </strong>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent-bright" />
+                  RIVER LEVEL: <strong className="font-medium text-ink-100">{river?.value != null ? `${river.value.toFixed(2)} ${river.unit}` : '—'}</strong>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                  ALGO: <strong className="font-medium text-ink-100">{models.data?.active ?? '—'}</strong>
+                </span>
+              </>
+            )}
           </div>
         </div>
       </Rise>
@@ -326,12 +448,12 @@ export default function Telemetry() {
       <Stagger className="mb-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
         <Rise>
           <MetricCard
-            label="Rainfall Acc. (3H)"
+            label={liveRain3h != null ? 'Rainfall 3H · LIVE' : 'Rainfall Acc. (3H)'}
             icon={<Droplets size={14} aria-hidden />}
-            value={rain?.value != null ? rain.value.toFixed(0) : '—'}
-            unit={rain?.value != null ? rain.unit : undefined}
-            sub={rain?.freshness_label ?? 'next 3h forecast window'}
-            track={rain?.normalised != null ? rain.normalised * 100 : 0}
+            value={liveRain3h != null ? liveRain3h.toFixed(1) : rain?.value != null ? rain.value.toFixed(0) : '—'}
+            unit={liveRain3h != null ? 'mm' : rain?.value != null ? rain.unit : undefined}
+            sub={liveRain3h != null ? `Open-Meteo · ${livePoint?.time ? livePoint.time.slice(11, 16) : '--:--'} local` : (rain?.freshness_label ?? 'next 3h forecast window')}
+            track={liveRain3h != null ? Math.min(100, (liveRain3h / 60) * 100) : rain?.normalised != null ? rain.normalised * 100 : 0}
           />
         </Rise>
         <Rise>
@@ -340,7 +462,7 @@ export default function Telemetry() {
             icon={<Waves size={14} aria-hidden />}
             value={soil?.value != null ? soil.value.toFixed(0) : '—'}
             unit={soil?.value != null ? soil.unit : undefined}
-            sub={soil?.value != null && soil.value >= 80 ? 'NEAR POROSITY MAX' : (soil?.freshness_label ?? '—')}
+            sub={soil?.value != null && soil.value >= 80 ? 'NEAR POROSITY MAX · ENGINE' : `${soil?.freshness_label ?? '—'} · ENGINE`}
             subTone={soil?.value != null && soil.value >= 80 ? 'var(--color-accent-bright)' : undefined}
             track={soil?.normalised != null ? soil.normalised * 100 : 0}
             trackTone="var(--color-secondary)"
@@ -352,7 +474,7 @@ export default function Telemetry() {
             icon={<CloudFog size={14} aria-hidden />}
             value={river?.value != null ? river.value.toFixed(2) : '—'}
             unit={river?.value != null ? river.unit : undefined}
-            sub={river ? `${river.freshness_label ?? ''} · quality ${(river.quality * 100).toFixed(0)}%` : 'no gauge in zone'}
+            sub={river ? `${river.freshness_label ?? ''} · quality ${(river.quality * 100).toFixed(0)}% · ENGINE` : 'no gauge in zone'}
             track={river?.normalised != null ? river.normalised * 100 : 0}
             trackTone="var(--color-critical)"
           />
