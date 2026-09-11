@@ -76,7 +76,7 @@ def health(db: Session = Depends(get_db)) -> dict:
 
         ctx = ProviderContext(
             now=dt.datetime.now(dt.timezone.utc).replace(tzinfo=None),
-            scenario_id=state.scenario_id if state else "normal_day",
+            scenario_id=state.scenario_id if state else "mumbai_normal",
             tick=state.tick if state else 0,
             connectivity=connectivity,
             forced_failures=ctx_failures,

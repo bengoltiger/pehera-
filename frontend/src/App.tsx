@@ -8,6 +8,7 @@ import Login from './pages/Login'
 import AlertsPage from './pages/authority/AlertsPage'
 import MapPage from './pages/authority/MapPage'
 import Overview from './pages/authority/Overview'
+import People from './pages/authority/People'
 import PriorityQueuePage from './pages/authority/PriorityQueuePage'
 import SimLab from './pages/authority/SimLab'
 import Sitrep from './pages/authority/Sitrep'
@@ -102,6 +103,16 @@ export default function App() {
             <RequireAuth roles={AUTH_ROLES}>
               <AppShell>
                 <AlertsPage />
+              </AppShell>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/authority/people"
+          element={
+            <RequireAuth roles={AUTH_ROLES}>
+              <AppShell>
+                <People />
               </AppShell>
             </RequireAuth>
           }

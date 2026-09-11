@@ -13,12 +13,20 @@ import type {
   Alert,
   AlertLevel,
   ApiError,
+  CitizenEntry,
+  CitizensResponse,
+  ClockControlResponse,
   Connectivity,
   DataHealth,
   EarlySignal,
   EngineConfig,
+  EvacuationPlan,
   ForecastEntry,
   Health,
+  HeartbeatBody,
+  HeartbeatResponse,
+  Hospital,
+  HospitalList,
   Lang,
   LiveWeather,
   LocationSummary,
@@ -26,29 +34,68 @@ import type {
   ModelInfo,
   ObservationMeta,
   Overview,
+  PersonasResponse,
   PriorityEntry,
   ProviderInfo,
+  RainfallForecast,
+  RainfallState,
+  ReRouteResult,
+  RiskCell,
   RiskField,
   RiskResponse,
+  RoutePlan,
+  RoutingProvidersResponse,
+  SafeRoute,
+  SafeRoutePlan,
   Scenario,
+  Shelter,
+  ShelterList,
   SimClock,
+  StormState,
+  StormTrack,
+  TerrainGrid,
   ThreatCell,
   TokenResponse,
+  TrafficState,
   User,
 } from './types'
 
 const TOKEN_KEY = 'pehra.token'
+const BASE_OVERRIDE_KEY = 'pehra.api_base'
 
 /**
- * Where the API lives. Empty string means "same origin", which is the normal
- * case: Vite proxies /api in development and FastAPI serves the built SPA in
- * production. Set VITE_API_BASE only when the API is on another origin (or in
- * tests, where relative URLs cannot be resolved).
+ * Where the API lives. Priority:
+ *   1. a runtime override (the APK's Settings screen saves it to localStorage
+ *      under `pehra.api_base`, so the same build can point at any live server);
+ *   2. `VITE_API_BASE` (build-time; normal web deployments keep this empty and
+ *      let FastAPI serve the SPA on the same origin, or Vite proxy in dev).
  */
-export const API_BASE_URL: string =
-  (import.meta.env?.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? ''
+const ENV_API_BASE: string = (import.meta.env?.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? ''
 
-export const apiUrl = (path: string) => `${API_BASE_URL}${path}`
+export function getApiBase(): string {
+  try {
+    const override = localStorage.getItem(BASE_OVERRIDE_KEY)
+    if (override) return override.replace(/\/$/, '')
+  } catch {
+    /* storage disabled */
+  }
+  return ENV_API_BASE
+}
+
+export function setApiBase(url: string) {
+  try {
+    if (url && url.trim()) localStorage.setItem(BASE_OVERRIDE_KEY, url.trim().replace(/\/$/, ''))
+    else localStorage.removeItem(BASE_OVERRIDE_KEY)
+  } catch {
+    /* ignore */
+  }
+  // force a reload so every cached URL uses the new base
+  if (typeof window !== 'undefined') window.location.reload()
+}
+
+export const API_BASE_URL: string = getApiBase()
+
+export const apiUrl = (path: string) => `${getApiBase()}${path}`
 
 export class PehraError extends Error {
   status: number
@@ -310,6 +357,98 @@ export const api = {
     ),
   audit: (params: { limit?: number; action?: string; entity_type?: string } = {}) =>
     request<{ count: number; entries: Record<string, unknown>[] }>(`/api/audit${qs(params)}`),
+
+  /* ---- terrain / DEM --------------------------------------------------- */
+  terrain: (params: { step_deg?: number; padding_deg?: number } = {}) =>
+    request<TerrainGrid>(`/api/terrain${qs(params)}`),
+  terrainPoint: (lat: number, lng: number) =>
+    request<Record<string, unknown>>(`/api/terrain/point${qs({ lat, lng })}`),
+
+  /* ---- storm system ---------------------------------------------------- */
+  storm: (params: { lead_ticks?: number } = {}) => request<StormState>(`/api/storm${qs(params)}`),
+  stormTrack: () => request<StormTrack>('/api/storm/track'),
+
+  /* ---- rainfall -------------------------------------------------------- */
+  rainfall: (locationId = 'loc_kurla') =>
+    request<RainfallState>(`/api/rainfall${qs({ location_id: locationId })}`),
+  rainfallForecast: (locationId = 'loc_kurla', horizonHours = 6) =>
+    request<RainfallForecast>(`/api/rainfall/forecast${qs({ location_id: locationId, horizon_hours: horizonHours })}`),
+
+  /* ---- traffic --------------------------------------------------------- */
+  traffic: () => request<TrafficState>('/api/traffic'),
+
+  /* ---- routes ---------------------------------------------------------- */
+  planRoute: (fromLat: number, fromLng: number, toLat: number, toLng: number) =>
+    request<RoutePlan>(`/api/routes${qs({ from_lat: fromLat, from_lng: fromLng, to_lat: toLat, to_lng: toLng })}`),
+  evacuationPlan: (locationId = 'loc_kurla') =>
+    request<EvacuationPlan>(`/api/routes/evacuation${qs({ location_id: locationId })}`),
+
+  /* ---- safe navigation (RoutingProvider, Section 29) ------------------- */
+  routingProviders: () => request<RoutingProvidersResponse>('/api/routes/providers'),
+  planSafeRoute: (body: {
+    from_lat: number
+    from_lng: number
+    to_lat: number
+    to_lng: number
+    preference?: 'fastest' | 'balanced' | 'safest'
+  }) => request<SafeRoutePlan>('/api/routes/plan', { method: 'POST', body }),
+  getRoute: (routeId: string) => request<SafeRoute>(`/api/routes/${routeId}`),
+  reroute: (routeId: string) =>
+    request<ReRouteResult>(`/api/routes/${routeId}/re-route`, { method: 'POST' }),
+
+  /* ---- response assets ------------------------------------------------- */
+  shelters: (locationId?: string) =>
+    request<ShelterList>(`/api/shelters${qs({ location_id: locationId })}`),
+  sheltersNearest: (lat: number, lng: number, limit = 3) =>
+    request<{ query: { lat: number; lng: number }; count: number; shelters: (Shelter & { distance_km: number })[]; is_simulated: boolean; clock: SimClock }>(
+      `/api/shelters/nearest${qs({ lat, lng, limit })}`,
+    ),
+  shelter: (id: string) => request<Shelter & Record<string, unknown>>(`/api/shelters/${id}`),
+  hospitals: (locationId?: string) =>
+    request<HospitalList>(`/api/hospitals${qs({ location_id: locationId })}`),
+  hospitalsNearest: (lat: number, lng: number, limit = 3) =>
+    request<{ query: { lat: number; lng: number }; count: number; hospitals: (Hospital & { distance_km: number })[]; is_simulated: boolean; clock: SimClock }>(
+      `/api/hospitals/nearest${qs({ lat, lng, limit })}`,
+    ),
+  hospital: (id: string) => request<Hospital & Record<string, unknown>>(`/api/hospitals/${id}`),
+
+  /* ---- grid-cell risk -------------------------------------------------- */
+  riskCell: (lat: number, lng: number) => request<RiskCell>(`/api/risk/cell${qs({ lat, lng })}`),
+
+  /* ---- simulation clock controls --------------------------------------- */
+  simulationStart: () => request<ClockControlResponse>('/api/simulation/start', { method: 'POST' }),
+  simulationPause: () => request<ClockControlResponse>('/api/simulation/pause', { method: 'POST' }),
+  simulationSpeed: (speed: number) =>
+    request<ClockControlResponse>('/api/simulation/speed', { method: 'POST', body: { speed } }),
+  simulationJump: (tick: number, runAlerts = true) =>
+    request<ClockControlResponse>(
+      '/api/simulation/jump',
+      { method: 'POST', body: { tick, run_alerts: runAlerts } },
+    ),
+
+  /* ---- citizen mobile app ⇄ authority People screen ---------------------- */
+  personas: () => request<PersonasResponse>('/api/citizens/personas'),
+  citizenHeartbeat: (body: HeartbeatBody) =>
+    request<HeartbeatResponse>('/api/citizens/heartbeat', { method: 'POST', body }),
+  citizens: () => request<CitizensResponse>('/api/citizens'),
+  citizenHelp: (personaId: string, message = '') =>
+    request<{ help: CitizenEntry['help']; is_simulated: boolean; state: string }>(
+      `/api/citizens/${personaId}/help`,
+      { method: 'POST', body: { message } },
+    ),
+  ackCitizenHelp: (personaId: string, acknowledged_by = '') =>
+    request<{ help: CitizenEntry['help']; is_simulated: boolean }>(
+      `/api/citizens/${personaId}/help/ack`,
+      { method: 'POST', body: { acknowledged_by } },
+    ),
+  resolveCitizenHelp: (personaId: string) =>
+    request<{ help: CitizenEntry['help']; is_simulated: boolean }>(
+      `/api/citizens/${personaId}/help/resolve`,
+      { method: 'POST' },
+    ),
+  resetCitizens: () => request<{ count: number; reset: boolean; note: string }>('/api/citizens/reset', {
+    method: 'POST',
+  }),
 }
 
 export type { PriorityEntry }

@@ -24,6 +24,8 @@ export const STRINGS: Record<Lang, Dict> = {
     'nav.map': 'Map',
     'nav.queue': 'Priority queue',
     'nav.alerts': 'Alerts',
+
+    'nav.people': 'People & SOS',
     'nav.incidents': 'Incidents',
     'nav.analytics': 'Analytics',
     'nav.lab': 'Simulation lab',
@@ -98,6 +100,7 @@ export const STRINGS: Record<Lang, Dict> = {
     'nav.map': 'नक्शा',
     'nav.queue': 'प्राथमिकता सूची',
     'nav.alerts': 'चेतावनियाँ',
+    'nav.people': 'नागरिक एवं सहायता',
     'nav.incidents': 'घटनाएँ',
     'nav.analytics': 'विश्लेषण',
     'nav.lab': 'सिमुलेशन लैब',

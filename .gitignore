@@ -23,6 +23,19 @@ coverage/
 # Built SPA served by FastAPI — regenerate with `npm run build`.
 backend/static/
 
+# ----------------------------------------------------------------- Mobile ----
+mobile/node_modules/
+mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/app/.cxx/
+mobile/android/local.properties
+mobile/android/.idea/
+mobile/android/captures/
+mobile/android/.externalNativeBuild/
+# web assets copied in by `npx cap sync` from backend/static/ (itself ignored)
+mobile/android/app/src/main/assets/public/
+
 # ----------------------------------------------------------------- Local ----
 .env
 .env.local

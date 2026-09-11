@@ -1,0 +1,38 @@
+# PEHRA backend dependencies (Python 3.13).
+#
+#   python -m venv .venv
+#   .venv/bin/pip install -r requirements.txt
+#
+# Versions are pinned to what the prototype was developed and tested against.
+# PyTorch is deliberately NOT used: the ML nowcaster is scikit-learn so the
+# whole stack runs in a 2 GB container.
+
+# --- web framework ---
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+starlette==1.6.0
+python-multipart==0.0.32
+
+# --- configuration & validation ---
+pydantic==2.13.5
+pydantic-settings==2.15.0
+python-dotenv==1.2.3
+
+# --- persistence ---
+SQLAlchemy==2.0.52
+
+# --- security ---
+PyJWT==2.13.0
+bcrypt==5.0.0
+passlib==1.7.4
+
+# --- modelling ---
+numpy==2.5.3
+scikit-learn==1.7.2
+scipy==1.18.1
+joblib==1.6.0
+
+# --- tests ---
+pytest==9.1.1
+pytest-asyncio==1.4.0
+httpx==0.28.1

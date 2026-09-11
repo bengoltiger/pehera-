@@ -269,6 +269,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
         'connectivity',
         'scenario_changed',
         'system',
+        'citizen.location',
+        'citizen.connection',
+        'citizen.help',
       ]) {
         source.addEventListener(name, (ev) => {
           try {

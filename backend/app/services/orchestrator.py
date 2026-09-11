@@ -51,6 +51,116 @@ def all_locations(db: Session) -> List[Location]:
     return db.query(Location).order_by(Location.name).all()
 
 
+_BAND_ORDER = ["SAFE", "LOW", "MODERATE", "HIGH", "CRITICAL"]
+
+
+def _what_changed(
+    prev: Optional[dict],
+    *,
+    scenario,
+    tick: int,
+    cells: List[dict],
+    queue: List[dict],
+    alert_actions: List[dict],
+    names: Dict[str, str],
+) -> List[dict]:
+    """Short, honest summary of what changed since the previous regional sweep.
+
+    Diffed against the *last* sweep stored in memory, so it narrates movement:
+    new / intensifying / dissipating threat cells, priority-queue shifts and
+    fresh alert decisions. Data is never invented — a quiet frame stays quiet.
+    """
+    changes: List[dict] = []
+
+    def _place(cell: dict) -> str:
+        for lid in cell.get("location_ids") or []:
+            name = names.get(lid)
+            if name:
+                return name
+        return "the region"
+
+    if not prev:
+        changes.append({
+            "what": "scenario",
+            "severity": "LOW",
+            "message": f"Regional assessment initialised — {scenario.name} at tick {tick}.",
+        })
+        for c in cells[:2]:
+            changes.append({
+                "what": "threat_cells",
+                "severity": c["severity_label"],
+                "message": f"{c['hazard'].replace('_', ' ')} threat cell detected near {_place(c)} "
+                           f"({c['current_severity']:.0f}/100).",
+            })
+        return changes
+
+    if (prev.get("scenario") or {}).get("id") != scenario.id:
+        changes.append({
+            "what": "scenario",
+            "severity": "LOW",
+            "message": f"Scenario switched to {scenario.name} (tick {tick}).",
+        })
+
+    prev_cells = {c["id"]: c for c in prev.get("threat_cells", [])}
+    cur_cells = {c["id"]: c for c in cells}
+    for cid, c in cur_cells.items():
+        pc = prev_cells.get(cid)
+        hazard = c["hazard"].replace("_", " ")
+        if pc is None:
+            changes.append({
+                "what": "threat_cells",
+                "severity": c["severity_label"],
+                "message": f"New {hazard} cell formed near {_place(c)} "
+                           f"({c['current_severity']:.0f}/100, {c['severity_label']}).",
+            })
+        elif pc["severity_label"] != c["severity_label"]:
+            oi = _BAND_ORDER.index(pc["severity_label"])
+            ni = _BAND_ORDER.index(c["severity_label"])
+            verb = "intensified" if ni > oi else "eased"
+            changes.append({
+                "what": "threat_cells",
+                "severity": c["severity_label"],
+                "message": f"{hazard} cell near {_place(c)} {verb} "
+                           f"({c['current_severity']:.0f}/100, {pc['severity_label']} → {c['severity_label']}).",
+            })
+    resolved = [c for cid_, c in prev_cells.items() if cid_ not in cur_cells]
+    for c in resolved[:2]:
+        changes.append({
+            "what": "threat_cells",
+            "severity": "LOW",
+            "message": f"{c['hazard'].replace('_', ' ')} cell near {_place(c)} no longer detected.",
+        })
+
+    old_top = [q["location_id"] for q in (prev.get("priority_queue") or [])[:3]]
+    new_top = queue[:3]
+    new_ids = [q["location_id"] for q in new_top]
+    lead = new_top[0] if new_top else None
+    if new_ids != old_top and lead and lead["location_id"] not in old_top:
+        changes.append({
+            "what": "priority",
+            "severity": lead["severity"]["key"],
+            "message": f"Priority shift — {lead['location_name']} now leads the queue ({lead['risk']:.0f}/100).",
+        })
+
+    for a in alert_actions[-3:]:
+        if a.get("action") in ("no_alert", "skipped", "suppressed", "grouped"):
+            continue
+        name = names.get(a.get("location_id"), "a monitored ward")
+        changes.append({
+            "what": "alerts",
+            "severity": a.get("level", "LOW"),
+            "message": f"Alert decision for {name}: {a['action'].replace('_', ' ')} ({a.get('level', '—')}).",
+        })
+
+    if not changes:
+        changes.append({
+            "what": "steady",
+            "severity": "LOW",
+            "message": "No significant change since the last evaluation.",
+        })
+    return changes[:8]
+
+
 def refresh_region(
     db: Session,
     *,
@@ -151,6 +261,16 @@ def refresh_region(
     # ---- priority queue ----
     queue = build_priority_queue(db, predictions)
 
+    changes = _what_changed(
+        prev=_last_sweep.get("summary"),
+        scenario=scenario,
+        tick=ctx.tick,
+        cells=cell_dicts,
+        queue=queue,
+        alert_actions=alert_actions,
+        names={loc.id: loc.name for loc in locations},
+    )
+
     duration = (dt.datetime.now() - started).total_seconds() * 1000
     log_event(
         db, level="info", component="orchestrator", event="region_refreshed",
@@ -171,6 +291,7 @@ def refresh_region(
         "risk_field": field,
         "alert_actions": alert_actions,
         "priority_queue": queue,
+        "changes": changes,
         "duration_ms": round(duration, 1),
     }
     _last_sweep.clear()
@@ -277,6 +398,24 @@ def step(db: Session, *, steps: int = 1, run_alerts: bool = True) -> dict:
         "at_end": state.tick >= scenario.total_ticks,
         "steps_run": len(results),
         "last": results[-1]["summary"] if results else None,
+    }
+
+
+def jump(db: Session, tick: int, *, run_alerts: bool = True) -> dict:
+    """JUMP the simulation clock to a tick and recompute the whole region."""
+    state = get_state(db)
+    scenario = get_scenario(state.scenario_id)
+    target = max(0, min(tick, scenario.total_ticks))
+    state.tick = target
+    state.updated_at = utcnow()
+    db.commit()
+    clear_caches()
+    out = refresh_region(db, run_alerts=run_alerts)
+    bus.publish("simulation_jump", {"tick": state.tick, "scenario": state.scenario_id})
+    return {
+        "tick": state.tick,
+        "at_end": state.tick >= scenario.total_ticks,
+        "summary": out["summary"],
     }
 
 
@@ -397,7 +536,7 @@ def reset_demo(db: Session, *, scenario_id: Optional[str] = None) -> dict:
     db.add(
         SimulationState(
             id=1,
-            scenario_id=scenario_id or "normal_day",
+            scenario_id=scenario_id or "mumbai_normal",
             tick=0,
             running=False,
             speed=1.0,
@@ -416,8 +555,8 @@ def reset_demo(db: Session, *, scenario_id: Optional[str] = None) -> dict:
     seed_all(db)
     log_event(db, level="info", component="orchestrator", event="demo_reset",
               message="Demo state reset to a known baseline.", context=counts, commit=True)
-    bus.publish("demo_reset", {"scenario": scenario_id or "normal_day"})
-    return {"cleared": counts, "scenario_id": scenario_id or "normal_day", "tick": 0}
+    bus.publish("demo_reset", {"scenario": scenario_id or "mumbai_normal"})
+    return {"cleared": counts, "scenario_id": scenario_id or "mumbai_normal", "tick": 0}
 
 
 # ---------------------------------------------------------------------------

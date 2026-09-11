@@ -15,18 +15,26 @@ from app.riskmodels.registry import model_registry
 from app.schemas.api import (
     ConnectivityRequest,
     FailureRequest,
+    JumpRequest,
     ModelSelectRequest,
     OverridesRequest,
     ResetRequest,
     ScenarioRunRequest,
     SimulationStepRequest,
+    SpeedRequest,
     VerifyRequest,
     WhatIfRequest,
 )
 from app.security.auth import record_audit, require_authority
-from app.services.clock import get_state, scenario_clock
+from app.services.clock import (
+    get_state,
+    scenario_clock,
+    set_running,
+    set_speed,
+)
 from app.services.orchestrator import (
     collapse_overrides,
+    jump,
     refresh_region,
     replay_scenario,
     reset_demo,
@@ -121,6 +129,50 @@ def run_scenario(scenario_id: str, payload: ScenarioRunRequest, request: Request
 def sim_step(payload: SimulationStepRequest, db: Session = Depends(get_db),
              user: User = Depends(require_authority)) -> dict:
     out = step(db, steps=payload.steps, run_alerts=payload.run_alerts)
+    return {"clock": scenario_clock(db), **out}
+
+
+@router.post(
+    "/simulation/start",
+    summary="Start the simulation clock (authority only)",
+    description=(
+        "Sets the clock state to running. Simulated time does not auto-advance in this "
+        "demo — for safety every advance is explicit — but the state is broadcast to "
+        "clients so a UI can reflect a running vs paused command post (Section 79)."
+    ),
+)
+def sim_start(db: Session = Depends(get_db), user: User = Depends(require_authority)) -> dict:
+    return set_running(db, True)
+
+
+@router.post(
+    "/simulation/pause",
+    summary="Pause the simulation clock (authority only)",
+)
+def sim_pause(db: Session = Depends(get_db), user: User = Depends(require_authority)) -> dict:
+    return set_running(db, False)
+
+
+@router.post(
+    "/simulation/speed",
+    summary="Set clock speed multiplier (authority only)",
+    description="1.0 equals one tick per explicit advance; the multiplier is broadcast as "
+                "a display/expiry scale, it never makes time move without an explicit step.",
+)
+def sim_speed(payload: SpeedRequest, db: Session = Depends(get_db),
+              user: User = Depends(require_authority)) -> dict:
+    return set_speed(db, payload.speed)
+
+
+@router.post(
+    "/simulation/jump",
+    summary="Jump the clock to a tick and recompute (authority only)",
+    description="Fast-forwards or rewinds to an arbitrary tick, then recomputes the whole "
+                "region (risk, threat cells, alerts) as if that tick had just happened.",
+)
+def sim_jump(payload: JumpRequest, db: Session = Depends(get_db),
+             user: User = Depends(require_authority)) -> dict:
+    out = jump(db, payload.tick, run_alerts=payload.run_alerts)
     return {"clock": scenario_clock(db), **out}
 
 

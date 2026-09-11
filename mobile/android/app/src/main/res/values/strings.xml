@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PEHRA Citizen</string>
+    <string name="title_activity_main">PEHRA Citizen</string>
+    <string name="package_name">com.pehra.citizen</string>
+    <string name="custom_url_scheme">com.pehra.citizen</string>
+</resources>

@@ -46,6 +46,12 @@ def validate_value(feature: str, value: Optional[float]) -> Optional[float]:
         "population_density": (0.0, 200000.0),
         "historical_similarity": (0.0, 1.0),
         "elevation_m": (-500.0, 9000.0),
+        "slope_deg": (0.0, 90.0),
+        "coastal_exposure": (0.0, 1.0),
+        "flood_susceptibility": (0.0, 1.0),
+        "tide_level_m": (0.0, 12.0),
+        "surge_m": (0.0, 10.0),
+        "tide_rise_rate": (-5.0, 5.0),
     }
     lo, hi = hard_limits.get(feature, (-1e9, 1e9))
     if v < lo or v > hi:
@@ -128,6 +134,12 @@ FEATURE_LABELS: Dict[str, str] = {
     "population_density": "Population density",
     "historical_similarity": "Historical event similarity",
     "elevation_m": "Elevation",
+    "slope_deg": "Ground slope",
+    "flood_susceptibility": "Flood susceptibility",
+    "coastal_exposure": "Coastal exposure",
+    "tide_level_m": "Tide level",
+    "surge_m": "Storm surge",
+    "tide_rise_rate": "Tide rise rate",
 }
 
 FEATURE_LABELS_HI: Dict[str, str] = {
@@ -150,6 +162,12 @@ FEATURE_LABELS_HI: Dict[str, str] = {
     "population_density": "जनसंख्या घनत्व",
     "historical_similarity": "ऐतिहासिक घटना समानता",
     "elevation_m": "ऊँचाई",
+    "slope_deg": "भू-ढाल",
+    "flood_susceptibility": "बाढ़ संवेदनशीलता",
+    "coastal_exposure": "तटीय जोखिम",
+    "tide_level_m": "ज्वार स्तर",
+    "surge_m": "तूफानी लहर",
+    "tide_rise_rate": "ज्वार वृद्धि दर",
 }
 
 

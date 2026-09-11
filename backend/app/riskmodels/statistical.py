@@ -10,9 +10,13 @@ from __future__ import annotations
 
 import os
 import pickle
+import re
+import sys
+import warnings
 from typing import List, Optional
 
 import numpy as np
+import sklearn
 
 from app.core.risk_config import HAZARDS
 from app.engine.risk_engine import (
@@ -48,6 +52,29 @@ FEATURE_ORDER = [
 ARTEFACT = os.path.join(os.path.dirname(__file__), "artefacts", "statistical.pkl")
 
 
+def _load_pkl_with_version(path: str):
+    """Load a pickle artefact and return ``(payload, pickle_sklearn_version)``.
+
+    sklearn >= 1.3 no longer records ``__sklearn_version__`` on estimators, so
+    the only authoritative trace of the training library version is the
+    ``InconsistentVersionWarning`` raised during unpickling. We capture it and
+    parse the version string; when nothing is found we return ``None`` and the
+    model reports the version as unknown instead of guessing.
+    """
+    with open(path, "rb") as fh:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            payload = pickle.load(fh)
+            version: Optional[str] = None
+            for w in caught:
+                text = str(w.message)
+                m = re.search(r"version\s+([0-9]+(?:\.[0-9]+)*)", text)
+                if m:
+                    version = m.group(1)
+                    break
+    return payload, version
+
+
 def build_vector(norm: dict, horizon_minutes: int = 0) -> np.ndarray:
     row = [float(norm.get(f) or 0.0) for f in FEATURE_ORDER]
     row.append(horizon_minutes / 360.0)
@@ -70,13 +97,13 @@ class StatisticalRiskModel(RiskModel):
     def __init__(self) -> None:
         self._model = None
         self._meta: dict = {}
+        self._pkl_sklearn = None
         self._load()
 
     def _load(self) -> None:
         if os.path.exists(ARTEFACT):
             try:
-                with open(ARTEFACT, "rb") as fh:
-                    payload = pickle.load(fh)
+                payload, self._pkl_sklearn = _load_pkl_with_version(ARTEFACT)
                 self._model = payload["model"]
                 self._meta = payload.get("meta", {})
                 self.version = self._meta.get("version", self.version)
@@ -97,9 +124,21 @@ class StatisticalRiskModel(RiskModel):
         d = super().describe()
         d["training_metrics"] = self._meta.get("metrics")
         d["training_samples"] = self._meta.get("n_samples")
+        d["trained_at"] = self._meta.get("trained_at")
+        d["runtime_sklearn"] = sklearn.__version__
+        d["runtime_python"] = sys.version.split()[0]
+        d["pickle_sklearn"] = self._pkl_sklearn
+        d["version_mismatch"] = (
+            bool(self._pkl_sklearn) and self._pkl_sklearn != sklearn.__version__
+        )
         d["metrics_caveat"] = (
             "These are fit statistics against the deterministic engine on simulated "
             "data. They are NOT real-world forecast accuracy."
+        )
+        d["honesty_note"] = (
+            "Artefact is a project-trained pickle loaded as-is. Runtime and pickle "
+            "library versions are reported side by side; PEHRA never silently "
+            "re-pickles or retrains an artefact, so version drift stays visible."
         )
         return d
 

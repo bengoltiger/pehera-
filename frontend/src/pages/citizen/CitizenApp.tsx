@@ -37,7 +37,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { DataHonestyBanner } from '../../components/AppShell'
 import { HeroMap } from '../../components/HeroMap'
-import type { MapRoute } from '../../components/RiskMap'
+import type { MapRoute, ShelterMark } from '../../components/RiskMap'
 import { RadarCanvas } from '../../components/RadarCanvas'
 import { Chip, PeHraLogo, SeverityBadge, SeverityBar, StatusPip } from '../../components/ui'
 import { Rise } from '../../components/anim'
@@ -48,6 +48,8 @@ import { useI18n } from '../../lib/i18n'
 import { useAuth, useLive } from '../../lib/providers'
 import { useTheme } from '../../lib/theme'
 import type { Alert, InfrastructureItem, RiskResponse } from '../../lib/types'
+import { MobileCitizen } from './MobileCitizen'
+import { SafeRouteScreen } from './SafeRoute'
 
 /* -------------------------------------------------------------------------- */
 /* helpers                                                                     */
@@ -426,7 +428,7 @@ function VillageDefense({
 }) {
   const { user } = useAuth()
   const { t } = useI18n()
-  const locationId = user?.home_location_id ?? 'loc_sinhagad_road'
+  const locationId = user?.home_location_id ?? 'loc_colaba'
   const risk = useApi((s) => api.risk(locationId, { detail: true, lang: user?.language ?? 'en' }, s), { deps: [locationId] })
   const locAlerts = useApi(() => api.alertsForLocation(locationId), { deps: [locationId] })
   const shelters = useShelters(locationId)
@@ -716,7 +718,7 @@ function VillageDefense({
 /* -------------------------------------------------------------------------- */
 
 function Evacuate({ user }: { user: { home_location_id?: string | null; language?: 'en' | 'hi' } }) {
-  const locationId = user.home_location_id ?? 'loc_sinhagad_road'
+  const locationId = user.home_location_id ?? 'loc_colaba'
   const risk = useApi((s) => api.risk(locationId, { detail: true, lang: user.language ?? 'en' }, s), { deps: [locationId] })
   const locAlerts = useApi(() => api.alertsForLocation(locationId), { deps: [locationId] })
   const shelters = useShelters(locationId)
@@ -748,10 +750,24 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
     : r
       ? [r.location.latitude, r.location.longitude]
       : null
-  const evacRoute: MapRoute | null =
-    evacFrom && topShelter ? { from: evacFrom, to: [topShelter.shelter.lat, topShelter.shelter.lng] } : null
   const evacJourneyKm = fix ? (shelterFromYouKm ?? null) : topShelter ? topShelter.distanceKm : null
-  const evacFromLabel = fix ? 'your GPS position' : 'your zone centre'
+  const evacFromLabel = fix ? 'your location' : 'your area'
+  const evacRoute: MapRoute | null =
+    evacFrom && topShelter
+      ? {
+          from: evacFrom,
+          to: [topShelter.shelter.lat, topShelter.shelter.lng],
+          label: evacJourneyKm != null ? `NEAREST SHELTER · ${walkMinutes(evacJourneyKm)} MIN WALK` : 'NEAREST SHELTER',
+        }
+      : null
+  const evacShelterMarks: ShelterMark[] = shelters.map((s, i) => ({
+    id: s.shelter.id,
+    name: s.shelter.name,
+    lat: s.shelter.lat,
+    lng: s.shelter.lng,
+    nearest: i === 0,
+    distanceKm: s.distanceKm,
+  }))
 
   return (
     <div className="flex flex-col gap-3 p-3 pb-6">
@@ -857,8 +873,10 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
               className="h-72"
               selectedLocationId={locationId}
               route={evacRoute}
+              shelters={evacShelterMarks}
+              fitRoute
             >
-              <div className="pointer-events-none absolute top-2 left-2 flex items-center gap-1.5 rounded bg-ink-950/85 px-2 py-1 backdrop-blur-md">
+              <div className="pointer-events-none absolute top-2 left-12 flex items-center gap-1.5 rounded bg-ink-950/85 px-2 py-1 backdrop-blur-md">
                 <Compass size={13} className="text-accent-bright" aria-hidden />
                 <span className="font-mono text-[10px] text-ink-100">
                   {fix
@@ -993,7 +1011,7 @@ function Evacuate({ user }: { user: { home_location_id?: string | null; language
 /* -------------------------------------------------------------------------- */
 
 function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
-  const homeId = user.home_location_id ?? 'loc_sinhagad_road'
+  const homeId = user.home_location_id ?? 'loc_colaba'
   const [pickedId, setPickedId] = useState<string | null>(null)
   const locationId = pickedId ?? homeId
   const isHome = locationId === homeId
@@ -1009,8 +1027,6 @@ function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
     : center
       ? [center.latitude, center.longitude]
       : null
-  const journeyRoute: MapRoute | null =
-    journeyFrom && topShelter ? { from: journeyFrom, to: [topShelter.shelter.lat, topShelter.shelter.lng] } : null
   const journeyKm = fix
     ? topShelter
       ? haversineKm(fix.lat, fix.lng, topShelter.shelter.lat, topShelter.shelter.lng)
@@ -1018,7 +1034,25 @@ function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
     : topShelter
       ? topShelter.distanceKm
       : null
-  const journeyFromLabel = fix ? 'your GPS position' : 'this area'
+  const journeyFromLabel = fix ? 'your location' : 'this area'
+  const journeyRoute: MapRoute | null =
+    journeyFrom && topShelter
+      ? {
+          from: journeyFrom,
+          to: [topShelter.shelter.lat, topShelter.shelter.lng],
+          label: journeyKm != null ? `NEAREST SHELTER · ${walkMinutes(journeyKm)} MIN WALK` : 'NEAREST SHELTER',
+        }
+      : null
+  /* Every shelter gets a pin, so the citizen can see ALL options — the
+     blue line goes to the nearest one, the others are there too. */
+  const shelterMarks: ShelterMark[] = shelters.map((s, i) => ({
+    id: s.shelter.id,
+    name: s.shelter.name,
+    lat: s.shelter.lat,
+    lng: s.shelter.lng,
+    nearest: i === 0,
+    distanceKm: s.distanceKm,
+  }))
 
   return (
     <div className="flex flex-col gap-3 p-3 pb-6">
@@ -1028,12 +1062,19 @@ function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
         selectedLocationId={locationId}
         onSelectLocation={(id) => setPickedId(id)}
         route={journeyRoute}
+        shelters={shelterMarks}
+        fitRoute
       >
-        <div className="pointer-events-none absolute top-2 left-2 z-[500] rounded bg-ink-950/90 px-2 py-1 backdrop-blur-md">
-          <span className="font-mono text-[9px] font-bold text-accent-bright">
+        <div className="pointer-events-none absolute top-2 left-12 z-[500] flex flex-col items-start gap-1">
+          <span className="rounded bg-ink-950/90 px-2 py-1 font-mono text-[9px] font-bold text-accent-bright backdrop-blur-md">
             VIEWING: {titleCase(risk.data?.location?.name ?? 'YOUR AREA').toUpperCase()}
             {!isHome && risk.data?.location?.name ? ' · TAPPED AREA' : ''}
           </span>
+          {shelterMarks.length > 0 && (
+            <span className="rounded bg-ink-950/90 px-2 py-1 font-mono text-[9px] font-bold text-safe backdrop-blur-md">
+              {shelterMarks.length} SHELTER{shelterMarks.length === 1 ? '' : 'S'} MARKED · BLUE LINE = NEAREST
+            </span>
+          )}
         </div>
       </HeroMap>
       {risk.data && (
@@ -1058,8 +1099,8 @@ function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
         </div>
       )}
       <p className="font-mono text-[9px] leading-snug text-ink-500 uppercase">
-        Tap any area to see its danger level. The blue route shows the estimated walk to the nearest shelter from
-        this area — a straight-line estimate, not a road map.
+        The blue line is your walk to the NEAREST shelter (★). Green pins mark ALL shelters so you can see every
+        option. Tap any area to see its danger level. Distances are straight-line, not road distances.
       </p>
     </div>
   )
@@ -1069,11 +1110,13 @@ function CitizenMap({ user }: { user: { home_location_id?: string | null } }) {
 /* Shell                                                                       */
 /* -------------------------------------------------------------------------- */
 
-type Tab = 'home' | 'map' | 'evacuate'
+type Tab = 'home' | 'map' | 'safe' | 'evacuate' | 'connect'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'home', label: 'Home', icon: <Home size={19} aria-hidden /> },
   { id: 'map', label: 'Map', icon: <MapIcon size={19} aria-hidden /> },
+  { id: 'safe', label: 'Route', icon: <Route size={19} aria-hidden /> },
+  { id: 'connect', label: 'Relay', icon: <Radio size={19} aria-hidden /> },
   { id: 'evacuate', label: 'Safety', icon: <Siren size={19} aria-hidden /> },
 ]
 
@@ -1138,6 +1181,8 @@ export default function CitizenApp({ initialTab = 'home' }: { initialTab?: Tab }
             >
               {tab === 'home' && <VillageDefense onEvacuate={() => setTab('evacuate')} />}
               {tab === 'map' && <CitizenMap user={user ?? {}} />}
+              {tab === 'safe' && <SafeRouteScreen user={user ?? {}} />}
+              {tab === 'connect' && <MobileCitizen user={user ?? {}} />}
               {tab === 'evacuate' && <Evacuate user={user ?? {}} />}
             </motion.div>
           </AnimatePresence>

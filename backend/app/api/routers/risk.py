@@ -86,7 +86,7 @@ def nearest_location(
         "location": _location_dict(best),
         "distance_km": round(d, 2),
         "within_coverage": d <= 25.0,
-        "note": "PEHRA's demo coverage is Pune district. Outside it, pick a location manually."
+        "note": "PEHRA's demo coverage is Mumbai city. Outside it, pick a location manually."
         if d > 25.0 else None,
     }
 
@@ -194,6 +194,108 @@ def risk_at_point(
         "note": "Hazard-only estimate (exposure not applied). Static properties interpolated "
                 "from the nearest monitored wards.",
     }
+
+@router.get(
+    "/risk/cell",
+    summary="Grid-cell risk at an arbitrary coordinate",
+    description=(
+        "Cell-level estimate at any WGS84 point: hazard severities for every hazard family "
+        "active at that point, the dominant hazard, severity band, nearest ward and any "
+        "tracked threat cell covering the point. Static terrain/exposure inputs are "
+        "inverse-distance interpolated and labelled as such."
+    ),
+)
+def risk_at_cell(
+    lat: float = Query(ge=-90, le=90),
+    lng: float = Query(ge=-180, le=180),
+    db: Session = Depends(get_db),
+) -> dict:
+    from app.core.risk_config import HAZARDS
+
+    ctx = build_context(db)
+    locations = db.query(Location).all()
+    sites = build_sites(locations)
+    point = hazard_at_point(ctx, lat, lng, sites)
+
+    from app.engine.risk_engine import score_hazard
+    from app.engine.risk_field import _idw
+    from app.engine.normalise import normalise
+    from app.simulation.scenarios import get_scenario, scenario_field_at
+
+    scenario = get_scenario(ctx.scenario_id)
+    field = scenario_field_at(scenario, ctx.tick, lat, lng)
+    overrides = ctx.overrides or {}
+    static = _idw(sites, lat, lng)
+    raw = dict(field) or {}
+    for feat in list(raw):
+        if raw[feat] is not None and feat in overrides:
+            raw[feat] = float(raw[feat]) * float(overrides[feat])
+
+    prev = scenario_field_at(scenario, max(0, ctx.tick - 1), lat, lng)
+    pi, ci = prev.get("rain_intensity"), raw.get("rain_intensity")
+    if pi is not None and ci is not None:
+        m = float(overrides.get("rain_intensity", 1.0))
+        raw["rain_acceleration"] = (ci - pi) * m * (60.0 / max(scenario.tick_minutes, 1))
+
+    raw["terrain_vulnerability"] = static["terrain"]
+    raw["drainage_deficiency"] = static["drainage"]
+    raw["population_density"] = static["density"]
+    raw["elevation_m"] = round(static["elevation"], 2)
+    raw["slope_deg"] = round(static["slope"], 2)
+    raw["coastal_exposure"] = round(static["coastal"], 4)
+    from app.engine.dem import flood_susceptibility as _fs
+
+    raw["flood_susceptibility"] = _fs(static["elevation"], static["slope"], static["drainage"])
+
+    norm = {k: normalise(k, v) for k, v in raw.items()}
+    breakdown = []
+    for h in static["hazards"]:
+        if h not in HAZARDS:
+            continue
+        res = score_hazard(h, norm, raw)
+        breakdown.append({
+            "hazard": h,
+            "label": HAZARDS[h].label,
+            "severity": round(res.severity_index, 1),
+        })
+    breakdown.sort(key=lambda x: -x["severity"])
+
+    from app.engine.risk_engine import severity_label
+
+    nearest = db.get(Location, point["nearest_location_id"]) if point.get("nearest_location_id") else None
+    return {
+        "lat": point["lat"],
+        "lng": point["lng"],
+        "severity": point["severity"],
+        "severity_band": severity_label(point["severity"]),
+        "dominant_hazard": point["hazard"],
+        "hazard_breakdown": breakdown,
+        "nearest_location": {
+            "id": nearest.id, "name": nearest.name,
+            "distance_km": point["nearest_km"],
+        } if nearest else None,
+        "interpolated": point["interpolated"],
+        "threat_cells": _cells_containing(db, lat, lng),
+        "note": "Hazard-only cell estimate (exposure not applied). Static properties "
+                "interpolated from the nearest monitored wards.",
+    }
+
+
+def _cells_containing(db: Session, lat: float, lng: float) -> List[dict]:
+    cells = db.query(ThreatCell).filter(ThreatCell.status.in_(["active", "dissipating"])).all()
+    out = []
+    for c in cells:
+        from app.simulation.scenarios import haversine_km as _hk
+
+        if _hk(c.center_lat, c.center_lng, lat, lng) <= c.radius_km:
+            out.append({
+                "id": c.id, "hazard": c.hazard, "severity": round(c.current_severity, 1),
+                "severity_label": c.severity_label, "center_lat": c.center_lat,
+                "center_lng": c.center_lng, "radius_km": round(c.radius_km, 2),
+                "status": c.status,
+            })
+    return out
+
 
 @router.get(
     "/risk/{location_id}",
@@ -356,6 +458,34 @@ def map_layers(db: Session = Depends(get_db)) -> dict:
             for a in alerts
         ],
         "data_origin": "demo_seed",
+        # Base-map honesty (Satellite / Aerial / Terrain). None of these are
+        # live feeds -- the satellite product is a deterministic demo but the
+        # API must never label it "LIVE". `mode` is one of NEAR_REAL_TIME,
+        # HISTORICAL or SIMULATED.
+        "base_maps": [
+            {
+                "key": "satellite",
+                "name": "Demo satellite product",
+                "provider": "PEHRA Demo Satellite Provider",
+                "mode": "SIMULATED",
+                "label": "SIMULATED satellite imagery (demo) -- NOT live",
+                "is_live": False,
+                "resolution_m": 30,
+                "freshness_s": 1680,
+                "acquisition": "deterministic demo scene, not a real sensor",
+            },
+            {
+                "key": "aerial",
+                "name": "DEM-derived aerial view",
+                "provider": "pehra terrain grid",
+                "mode": "SIMULATED",
+                "label": "SIMULATED elevation/slope view (IDW interpolation)",
+                "is_live": False,
+                "resolution_m": 500,
+                "freshness_s": None,
+                "acquisition": "interpolated from seeded Mumbai DEM reference points",
+            },
+        ],
     }
 
 

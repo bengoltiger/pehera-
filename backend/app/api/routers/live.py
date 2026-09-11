@@ -29,7 +29,7 @@ router = APIRouter(tags=["live-data"])
 
 LIVE_CACHE_TTL = 600  # seconds
 GRID_N = 12  # 12x12 grid of wind vectors for the particle field
-GRID_STEP_DEG = 0.05  # ~5 km at Pune's latitude
+GRID_STEP_DEG = 0.05  # ~5 km at Mumbai's latitude
 
 _cache: dict[tuple, tuple[float, dict]] = {}
 

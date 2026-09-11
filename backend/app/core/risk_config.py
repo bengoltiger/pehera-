@@ -137,6 +137,19 @@ NORMALISATION: Dict[str, dict] = {
     "drainage_deficiency": {"min": 0.0, "max": 1.0, "unit": "index", "curve": "linear"},
     "population_density": {"min": 50.0, "max": 22000.0, "unit": "people/km²", "curve": "log"},
     "historical_similarity": {"min": 0.0, "max": 1.0, "unit": "index", "curve": "linear"},
+    # ---- DEM / terrain (Section: MB-3) ----
+    # Low elevation is dangerous (inverse curve): every metre closer to sea
+    # level moves rapidly towards a flood-prone regime.
+    "elevation_m": {"min": 0.0, "max": 60.0, "unit": "m", "curve": "inverse"},
+    # Steeper ground sheds water; flat reclaimed land (slope ~0) ponds it.
+    "slope_deg": {"min": 0.0, "max": 18.0, "unit": "°", "curve": "inverse"},
+    # Composite DEM-derived indicator (elevation + slope + drainage). Already 0..1.
+    "flood_susceptibility": {"min": 0.0, "max": 1.0, "unit": "index", "curve": "linear"},
+    "coastal_exposure": {"min": 0.0, "max": 1.0, "unit": "index", "curve": "linear"},
+    # ---- coastal / tide ----
+    "tide_level_m": {"min": 0.8, "max": 5.5, "unit": "m above MSL", "curve": "linear"},
+    "surge_m": {"min": 0.0, "max": 3.0, "unit": "m", "curve": "linear"},
+    "tide_rise_rate": {"min": 0.0, "max": 1.2, "unit": "m/h", "curve": "linear"},
 }
 
 
@@ -179,9 +192,10 @@ HAZARDS: Dict[str, HazardDefinition] = {
             "soil_moisture": 0.12,
         },
         vulnerability_weights={
-            "terrain_vulnerability": 0.55,
-            "drainage_deficiency": 0.30,
-            "soil_moisture": 0.15,
+            "flood_susceptibility": 0.45,
+            "terrain_vulnerability": 0.25,
+            "drainage_deficiency": 0.20,
+            "soil_moisture": 0.10,
         },
         trend_weights={
             "rain_acceleration": 0.45,
@@ -212,9 +226,9 @@ HAZARDS: Dict[str, HazardDefinition] = {
             "soil_moisture": 0.20,
         },
         vulnerability_weights={
-            "drainage_deficiency": 0.60,
-            "terrain_vulnerability": 0.30,
-            "population_density": 0.10,
+            "drainage_deficiency": 0.40,
+            "flood_susceptibility": 0.40,
+            "population_density": 0.20,
         },
         trend_weights={"rain_acceleration": 0.75, "soil_moisture": 0.25},
         forecast_weights={"forecast_rain_3h": 0.80, "cloud_top_temp_k": 0.20},
@@ -288,6 +302,30 @@ HAZARDS: Dict[str, HazardDefinition] = {
             "do": "drink water often, avoid the sun between 11:00 and 16:00, check on elderly neighbours",
         },
     ),
+    "coastal_flood": HazardDefinition(
+        key="coastal_flood",
+        label="Coastal flooding",
+        icon="tide-up",
+        unit_hint="m above MSL",
+        hazard_weights={
+            "tide_level_m": 0.35,
+            "surge_m": 0.35,
+            "wind_speed": 0.15,
+            "rain_intensity": 0.15,
+        },
+        vulnerability_weights={
+            "elevation_m": 0.40,
+            "coastal_exposure": 0.35,
+            "drainage_deficiency": 0.25,
+        },
+        trend_weights={"tide_rise_rate": 0.60, "rain_acceleration": 0.40},
+        forecast_weights={"forecast_rain_3h": 0.60, "wind_speed": 0.40},
+        required_features=["tide_level_m", "surge_m", "elevation_m"],
+        citizen_language={
+            "what": "sea water may push into coastal roads, creeks and low-lying areas",
+            "do": "move away from the sea face, creeps, creeks and underpasses near the coast",
+        },
+    ),
 }
 
 
@@ -351,6 +389,7 @@ HAZARD_FAMILIES = {
     "flood": "water",
     "urban_flood": "water",
     "extreme_rain": "water",
+    "coastal_flood": "coastal",
     "thunderstorm": "convective",
     "severe_wind": "wind",
     "heat": "thermal",
@@ -385,6 +424,21 @@ COMPOUND = {
             "pair": ["severe_wind", "thunderstorm"],
             "bonus": 5.0,
             "reason": "Squall-line winds with intense lightning threaten power infrastructure on two fronts.",
+        },
+        {
+            "pair": ["coastal_flood", "flood"],
+            "bonus": 9.0,
+            "reason": "Sea water is pushing inland at the same time as rivers rise — drainage outfalls are blocked from both sides.",
+        },
+        {
+            "pair": ["coastal_flood", "urban_flood"],
+            "bonus": 8.0,
+            "reason": "High tide stops storm water draining out, so rain waterlogs streets that would otherwise drain.",
+        },
+        {
+            "pair": ["coastal_flood", "severe_wind"],
+            "bonus": 6.0,
+            "reason": "Storm surge with strong winds creates large sea swells and coastal debris on top of water ingress.",
         },
     ],
 }
@@ -555,6 +609,26 @@ ACTION_LIBRARY: Dict[str, Dict[str, List[str]]] = {
             "Deploy tree-clearing and line-repair crews",
         ],
     },
+    "coastal_flood": {
+        "WATCH": [
+            "Compare tide gauge trend against rainfall intensity",
+            "Check drainage outfall gates and sluice positions",
+            "Alert coast guard and port authorities",
+        ],
+        "WARNING": [
+            "Advise against visiting sea-facing walkways and beaches",
+            "Close creek-side low roads and underpasses near the coast",
+            "Verify pump readiness for flooded outfalls",
+            "Warn low-lying coastal households (sea face, creeks, creekside mangroves)",
+        ],
+        "CRITICAL": [
+            "Issue public warning for sea face, creeks and low-lying coastal wards",
+            "Evacuate ground floors of the lowest-lying coastal properties",
+            "Stand by boats at the worst-affected creeks and sea faces",
+            "Coordinate with port, railways and bridges to halt coastal corridors",
+            "Activate emergency operations centre on the coastline",
+        ],
+    },
     "heat": {
         "WATCH": ["Publish hydration advisory", "Check water supply at public points"],
         "WARNING": [
@@ -589,6 +663,45 @@ VERIFICATION = {
     "event_threshold": 61.0,       # actual observed risk >= this counts as a real event
     "predicted_threshold": 61.0,   # predicted risk >= this counts as a positive prediction
     "correct_tolerance": 12.0,     # |predicted-actual| within this = "Correct"
+}
+
+# ---------------------------------------------------------------------------
+# Safe navigation routing (Sections MB-14, 29).
+# ---------------------------------------------------------------------------
+ROUTING = {
+    # Road-network sampling. `sample_every_km` sets how densely each road
+    # segment is scored against the hazard field.
+    "sample_every_km": 0.5,
+    "min_corridor_km": 1.0,
+    # Severity cut-offs applied to road segments (mirror the traffic layer).
+    "block_severity": 81.0,
+    "slow_severity": 61.0,
+    "slow_speed_kmh": 12.0,
+    "blocked_speed_kmh": 3.0,
+    "free_speed_kmh": 30.0,
+    # Cost weights per preference. Higher = the planner avoids that factor more.
+    "preferences": {
+        "fastest": {
+            "time_s": 1.0,
+            "risk": 0.12,
+            "distance_km": 0.5,
+        },
+        "balanced": {
+            "time_s": 1.0,
+            "risk": 1.0,
+            "distance_km": 0.2,
+        },
+        "safest": {
+            "time_s": 0.5,
+            "risk": 3.0,
+            "distance_km": 0.1,
+        },
+    },
+    # Radius (km) around the user within which hazardous conditions trigger a
+    # re-route warning. Risk above `reroute_risk_threshold` on the active
+    # route triggers a dynamic re-route recommendation.
+    "warn_radius_km": 2.0,
+    "reroute_risk_threshold": 61.0,
 }
 
 DEFAULT_HORIZONS_MIN = [0, 30, 60, 120, 180, 360]

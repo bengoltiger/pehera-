@@ -837,6 +837,8 @@ def _location_dict(loc: Location) -> dict:
         "latitude": loc.latitude,
         "longitude": loc.longitude,
         "elevation_m": loc.elevation_m,
+        "slope_deg": loc.slope_deg,
+        "coastal_exposure": loc.coastal_exposure,
         "area_km2": loc.area_km2,
         "population": loc.population,
         "vulnerable_population": loc.vulnerable_population,

@@ -1,0 +1,11 @@
+{
+  "appId": "com.pehra.citizen",
+  "appName": "PEHRA Citizen",
+  "webDir": "../backend/static",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "BluetoothLE": {}
+  }
+}

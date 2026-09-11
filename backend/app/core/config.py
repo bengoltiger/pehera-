@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     satellite_provider: str = "demo"
     terrain_provider: str = "demo"
     historical_provider: str = "demo"
+    tide_provider: str = "demo"
+
+    # --- Mumbai grid configuration (MB-3) ---
+    # Default cell size for the DEM/risk grid (metres). 500 m matches the SIHP
+    # demo spec for hyper-local Mumbai cells.
+    grid_cell_size_m: int = 500
 
     # --- notification channels ---
     notification_push_enabled: bool = True

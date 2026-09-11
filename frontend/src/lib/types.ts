@@ -460,6 +460,7 @@ export interface Overview {
   priority_queue: PriorityEntry[]
   threat_cells: ThreatCell[]
   risk_field_points: number
+  changes: { what: string; severity: string; message: string }[]
   data_mode: { is_simulated: boolean; label: string }
 }
 
@@ -636,6 +637,17 @@ export interface MapLayers {
     risk_score: number
   }[]
   data_origin: string
+  base_maps: {
+    key: string
+    name: string
+    provider: string
+    mode: 'NEAR_REAL_TIME' | 'HISTORICAL' | 'SIMULATED'
+    label: string
+    is_live: boolean
+    resolution_m: number | null
+    freshness_s: number | null
+    acquisition: string
+  }[]
 }
 
 export interface RiskField {
@@ -675,6 +687,331 @@ export interface EngineConfig {
   map: { tile_url: string; attribution: string }
 }
 
+/* ---- Mumbai environment & response layers (Phase G) --------------------- */
+
+export interface TerrainPoint {
+  lat: number
+  lng: number
+  elevation_m: number
+  slope_deg: number
+  coastal_exposure: number
+  drainage_deficiency: number
+  flood_susceptibility: number
+}
+
+export interface TerrainGrid {
+  points: TerrainPoint[]
+  bbox: { min_lat: number; max_lat: number; min_lng: number; max_lng: number } | null
+  step_deg: number
+  count: number
+  note: string
+}
+
+export interface StormPoint {
+  tick: number
+  lat: number
+  lng: number
+  wind_speed: number
+  wind_gust: number
+  surge_m: number
+  rain_intensity: number
+}
+
+export interface StormSystem {
+  name: string
+  type: string
+  active: boolean
+  latitude: number
+  longitude: number
+  bearing_deg: number | null
+  speed_kmh: number | null
+  radius_km: number
+}
+
+export interface StormState {
+  system: StormSystem
+  intensity: {
+    wind_speed_kmh: number
+    gust_kmh: number
+    surge_m: number
+    tide_level_m: number
+    rain_intensity_mmh: number
+    central_pressure_hpa: number | null
+    trend_3h: string
+  }
+  track: StormPoint[]
+  clock: SimClock
+  is_simulated: boolean
+  note: string
+}
+
+export interface StormTrack {
+  scenario_id: string
+  points: { tick: number; lat: number; lng: number; surge_m: number; wind_speed: number }[]
+  count: number
+  is_simulated: boolean
+}
+
+export interface RainfallBucket {
+  hours: number
+  accumulated_mm: number
+}
+
+export interface RainfallState {
+  location_id: string
+  generated_at: string
+  now: {
+    rain_intensity_mmh: number
+    rain_accumulation_3h_mm: number
+    forecast_rain_3h_mm: number
+  }
+  buckets: RainfallBucket[]
+  data_mode: { is_simulated: boolean; label: string }
+  clock: SimClock
+}
+
+export interface RainfallForecastBucket {
+  hours: number
+  forecast_mm: number
+  confidence: number
+}
+
+export interface RainfallForecast {
+  location_id: string
+  issued_at: string
+  source: string
+  horizon_hours: number
+  buckets: RainfallForecastBucket[]
+  data_mode: { is_simulated: boolean; label: string }
+  clock: SimClock
+}
+
+export interface TrafficCorridor {
+  id: string
+  name: string
+  from: { lat: number; lng: number }
+  to: { lat: number; lng: number }
+  ward_anchor: string
+  congestion: number
+  status: string
+  speed_kmh: number
+  bound_ward_risk: number | null
+}
+
+export interface TrafficState {
+  count: number
+  corridors: TrafficCorridor[]
+  blocked: TrafficCorridor[]
+  summary: Record<string, number>
+  data_mode: { is_simulated: boolean; label: string }
+  clock: SimClock
+}
+
+export interface RoutePoint {
+  lat: number
+  lng: number
+}
+
+export interface RoutePlan {
+  from: RoutePoint
+  to: RoutePoint
+  scenario_id: string
+  tick: number
+  best: string
+  route: {
+    label: string
+    polyline: RoutePoint[]
+    max_severity: number
+    worst_hazard: string | null
+    worst_point: RoutePoint | null
+    blocked: boolean
+    slow: boolean
+    distance_km: number
+    eta_minutes: number
+  }
+  alternatives: { label: string; max_severity: number; distance_km: number; blocked: boolean }[]
+  note: string
+  is_simulated: boolean
+  clock: SimClock
+}
+
+export interface EvacuationRoute {
+  shelter_id: string
+  shelter_name: string
+  address: string | null
+  phone: string | null
+  capacity: number | null
+  distance_km: number
+  eta_minutes: number
+  peak_severity: number
+  blocked: boolean
+  polyline: RoutePoint[]
+}
+
+export interface EvacuationPlan {
+  from: { location_id: string; name: string }
+  routes: EvacuationRoute[]
+  is_simulated: boolean
+  clock: SimClock
+}
+
+export type RoutePreference = 'fastest' | 'balanced' | 'safest'
+
+export interface RoutingProviderInfo {
+  key: string
+  name: string
+  version: string
+  is_simulated: boolean
+  note: string
+  weights?: Record<RoutePreference, Record<string, number>>
+}
+
+export interface RouteHazardFactor {
+  hazard: string
+  severity: number
+  label: string
+}
+
+export interface RouteInstruction {
+  index: number
+  text: string
+  distance_m: number
+  road: string
+}
+
+export interface RouteGeometry {
+  type: 'LineString'
+  coordinates: [number, number][]
+}
+
+export interface SafeRoute {
+  route_id: string
+  provider: {
+    key: string
+    name: string
+    kind: string
+    mode: string
+  }
+  from: RoutePoint
+  to: RoutePoint
+  preference: RoutePreference
+  distance_m: number
+  duration_s: number
+  risk_score: number
+  risk_level: SeverityKey
+  risk_reason: string
+  confidence: number
+  hazard_factors: RouteHazardFactor[]
+  instructions: RouteInstruction[]
+  geometry: RouteGeometry | null
+  last_evaluated_at: string
+  cost_weights: Record<string, number>
+  data_mode: { is_simulated: boolean; label: string }
+  clock: SimClock
+}
+
+export interface SafeRoutePlan extends SafeRoute {
+  alternatives: SafeRoute[]
+}
+
+export interface ReRouteResult {
+  route_id: string
+  changed: boolean
+  previous_level: SeverityKey
+  risk_level: SeverityKey
+  risk_reason: string
+  recommendation: 're-route' | 'continue'
+}
+
+export interface RoutingProvidersResponse {
+  providers: RoutingProviderInfo[]
+  default: string
+  is_simulated: boolean
+  note: string
+}
+
+export interface Shelter {
+  id: string
+  name: string
+  kind: string
+  latitude: number
+  longitude: number
+  capacity: number | null
+  criticality: string
+  address: string | null
+  phone: string | null
+  location_id: string
+  host_ward_risk: number | null
+  readiness: 'ready' | 'at_risk' | 'impacted'
+  data_origin: string
+}
+
+export interface ShelterList {
+  count: number
+  total_capacity: number
+  shelters: Shelter[]
+  data_mode: { is_simulated: boolean; label: string }
+  clock: SimClock
+}
+
+export interface Hospital {
+  id: string
+  name: string
+  kind: string
+  latitude: number
+  longitude: number
+  beds: number | null
+  criticality: string
+  address: string | null
+  phone: string | null
+  location_id: string
+  host_ward_risk: number | null
+  status: 'operational' | 'diverting' | 'stretched'
+  data_origin: string
+}
+
+export interface HospitalList {
+  count: number
+  total_beds: number
+  hospitals: Hospital[]
+  data_mode: { is_simulated: boolean; label: string }
+  clock: SimClock
+}
+
+export interface RiskCellHazard {
+  hazard: string
+  label: string
+  severity: number
+}
+
+export interface RiskCell {
+  lat: number
+  lng: number
+  severity: number
+  severity_band: Severity
+  dominant_hazard: string
+  hazard_breakdown: RiskCellHazard[]
+  nearest_location: { id: string; name: string; distance_km: number | null } | null
+  interpolated: boolean
+  threat_cells: {
+    id: string
+    hazard: string
+    severity: number
+    severity_label: string
+    center_lat: number
+    center_lng: number
+    radius_km: number
+    status: string
+  }[]
+  note: string
+}
+
+export interface ClockControlResponse {
+  running?: boolean
+  speed?: number
+  clock: SimClock
+}
+
 export interface ApiError {
   error: string
   message: string
@@ -684,4 +1021,105 @@ export interface ApiError {
   detail?: unknown
   required_roles?: string[]
   your_role?: string
+}
+
+/* ------------------------------------------------------------------------- */
+/* Citizen mobile app ⇄ authority People screen (CD-08, CD-12)               */
+/* ------------------------------------------------------------------------- */
+
+export type CitizenConnectivity = 'online' | 'offline' | 'relay'
+export type CitizenState = 'online' | 'relay' | 'stale' | 'offline' | 'unseen' | 'helped'
+
+export interface CitizenFix {
+  lat: number
+  lng: number
+  accuracy: number
+}
+
+export type CitizenHelp = {
+  status: 'requested' | 'acknowledged' | 'resolved'
+  requested_at: string
+  message: string
+  fix: CitizenFix
+  is_baseline: boolean
+  ack_by: string | null
+  ack_at: string | null
+  resolved_by: string | null
+  resolved_at: string | null
+} | null
+
+export interface CitizenPersona {
+  id: string
+  codename: string
+  full_name: string
+  ward_id: string
+  ward_label: string
+  phone: string
+  kind: string
+  baseline_fix: CitizenFix
+  demo_label: string
+  last_seen_at: string | null
+}
+
+export interface CitizenEntry {
+  id: string
+  codename: string
+  full_name: string
+  ward_id: string
+  ward_label: string
+  phone: string
+  kind: string
+  state: CitizenState
+  state_label: string
+  color: string
+  help: CitizenHelp
+  fix: CitizenFix
+  is_baseline: boolean
+  last_fix_at: string | null
+  last_seen_at: string | null
+  age_s: number | null
+  announced: CitizenConnectivity
+  via_relay: string | null
+  relayed_at: string | null
+  ble_enabled: boolean
+  bt_mode: 'native' | 'web' | 'simulated' | 'off'
+  battery: number | null
+  heading_deg: number | null
+  speed_kmh: number | null
+  note: string | null
+  history: { at: string; lat: number; lng: number; state: string }[] | null
+}
+
+export interface CitizensResponse {
+  count: number
+  citizens: CitizenEntry[]
+  is_simulated: boolean
+  note: string
+}
+
+export interface PersonasResponse {
+  count: number
+  personas: CitizenPersona[]
+  is_simulated: boolean
+  note: string
+}
+
+export interface HeartbeatBody {
+  persona_id?: string
+  codename?: string
+  fix?: CitizenFix
+  announced?: CitizenConnectivity
+  via_relay?: string
+  ble_enabled?: boolean
+  bt_mode?: CitizenEntry['bt_mode']
+  battery?: number | null
+  heading_deg?: number | null
+  speed_kmh?: number | null
+  note?: string
+}
+
+export interface HeartbeatResponse {
+  persona: CitizenEntry
+  is_simulated: boolean
+  published_events: number
 }

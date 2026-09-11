@@ -81,6 +81,8 @@ class Location(Base, TimestampMixin):
     latitude: Mapped[float] = mapped_column(Float, nullable=False)
     longitude: Mapped[float] = mapped_column(Float, nullable=False)
     elevation_m: Mapped[float] = mapped_column(Float, default=0.0)
+    slope_deg: Mapped[float] = mapped_column(Float, default=0.0)  # DEM-derived mean slope
+    coastal_exposure: Mapped[float] = mapped_column(Float, default=0.0)  # 0..1 proximity to coast/creek
     area_km2: Mapped[float] = mapped_column(Float, default=1.0)
     population: Mapped[int] = mapped_column(Integer, default=0)
     vulnerable_population: Mapped[int] = mapped_column(Integer, default=0)
@@ -451,7 +453,7 @@ class SimulationState(Base):
     __tablename__ = "simulation_state"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
-    scenario_id: Mapped[str] = mapped_column(String(48), default="normal_day")
+    scenario_id: Mapped[str] = mapped_column(String(48), default="mumbai_normal")
     tick: Mapped[int] = mapped_column(Integer, default=0)
     running: Mapped[bool] = mapped_column(Boolean, default=False)
     speed: Mapped[float] = mapped_column(Float, default=1.0)

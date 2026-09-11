@@ -5,7 +5,7 @@
  * chips, telemetry ribbons) exactly like the design's map overlays.
  */
 import { useSearchParams } from 'react-router-dom'
-import { MapLegend, RiskMap, useTileAvailability, type MapRoute, type MapToggles } from './RiskMap'
+import { MapLegend, RiskMap, useTileAvailability, type MapRoute, type MapToggles, type ShelterMark } from './RiskMap'
 import { ErrorBlock, Spinner } from './ui'
 import { api } from '../lib/api'
 import { useApi } from '../lib/hooks'
@@ -13,9 +13,13 @@ import { useEngineConfig } from '../lib/providers'
 
 const HERO_TOGGLES: MapToggles = {
   heat: false,
+  terrain: false,
   zones: true,
   threats: true,
   tracks: true,
+  storm: false,
+  traffic: false,
+  assets: false,
   alerts: true,
   infrastructure: true,
   rivers: true,
@@ -28,12 +32,16 @@ export function HeroMap({
   selectedLocationId,
   onSelectLocation,
   route,
+  shelters,
+  fitRoute = false,
 }: {
   children?: React.ReactNode
   className?: string
   selectedLocationId?: string | null
   onSelectLocation?: (id: string) => void
   route?: MapRoute | null
+  shelters?: ShelterMark[]
+  fitRoute?: boolean
 }) {
   const { config } = useEngineConfig()
   const tileUrl = config?.map?.tile_url ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
@@ -67,6 +75,8 @@ export function HeroMap({
             selectedLocationId={selectedLocationId}
             onSelectLocation={onSelectLocation}
             route={route}
+            shelters={shelters}
+            fitRoute={fitRoute}
           />
         </div>
       )}

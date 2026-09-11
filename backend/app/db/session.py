@@ -50,6 +50,13 @@ def _migrate() -> None:
         ):
             if col not in cols:
                 conn.exec_driver_sql(ddl)
+        lcols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(locations)")}
+        for col, ddl in (
+            ("slope_deg", "ALTER TABLE locations ADD COLUMN slope_deg FLOAT DEFAULT 0"),
+            ("coastal_exposure", "ALTER TABLE locations ADD COLUMN coastal_exposure FLOAT DEFAULT 0"),
+        ):
+            if col not in lcols:
+                conn.exec_driver_sql(ddl)
 
 
 def init_db() -> None:

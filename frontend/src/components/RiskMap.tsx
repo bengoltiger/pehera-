@@ -24,7 +24,17 @@ import {
   useMap,
 } from 'react-leaflet'
 import { SEVERITY_COLOR, fmtPeople, severityFromScore, withAlpha } from '../lib/format'
-import type { MapLayers, PriorityEntry, RiskField } from '../lib/types'
+import type {
+  Hospital,
+  MapLayers,
+  PriorityEntry,
+  RiskField,
+  Shelter,
+  StormState,
+  StormTrack,
+  TerrainGrid,
+  TrafficState,
+} from '../lib/types'
 
 export type TileStatus = 'probing' | 'available' | 'unavailable'
 
@@ -92,11 +102,18 @@ function Graticule({ bounds }: { bounds: L.LatLngBoundsExpression }) {
   )
 }
 
-function FitBounds({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
+/**
+ * Fits the view to `bounds`. Fits once per distinct target: re-fetching the
+ * same layers (new array identity, same coords) must not fight the user's
+ * pan, but a NEW route (e.g. the citizen taps a different ward, or the GPS
+ * fix replaces the zone centre) SHOULD re-centre on it.
+ */
+function FitBounds({ bounds, routeKey }: { bounds: L.LatLngBoundsExpression | null; routeKey?: string }) {
   const map = useMap()
-  const done = useRef(false)
+  const fittedFor = useRef<string | null>(null)
+  const key = routeKey ?? 'default'
   useEffect(() => {
-    if (!bounds || done.current) return
+    if (!bounds || fittedFor.current === key) return
     const tryFit = () => {
       // A zero-size container (headless/jsdom, or a not-yet-laid-out panel)
       // makes fitBounds compute a NaN zoom and corrupt every projection, so
@@ -104,7 +121,7 @@ function FitBounds({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
       const size = map.getSize()
       if (size.x < 2 || size.y < 2) return false
       map.fitBounds(bounds, { padding: [24, 24] })
-      done.current = true
+      fittedFor.current = key
       return true
     }
     if (tryFit()) return
@@ -120,7 +137,7 @@ function FitBounds({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
     return () => {
       map.off('resize', onResize)
     }
-  }, [bounds, map])
+  }, [bounds, key, map])
   return null
 }
 
@@ -150,12 +167,28 @@ export interface MapToggles {
   rivers: boolean
   alerts: boolean
   labels: boolean
+  terrain: boolean
+  storm: boolean
+  traffic: boolean
+  assets: boolean
 }
 
 /** A journey overlay: user position → destination (nearest shelter). */
 export interface MapRoute {
   from: [number, number]
   to: [number, number]
+  /** Small always-visible label on the destination (default: "Nearest shelter"). */
+  label?: string
+}
+
+/** A shelter pin to mark on the map (citizens need every shelter visible). */
+export interface ShelterMark {
+  id: string
+  name: string
+  lat: number
+  lng: number
+  nearest?: boolean
+  distanceKm?: number | null
 }
 
 export const DEFAULT_TOGGLES: MapToggles = {
@@ -167,6 +200,10 @@ export const DEFAULT_TOGGLES: MapToggles = {
   rivers: true,
   alerts: true,
   labels: true,
+  terrain: true,
+  storm: true,
+  traffic: false,
+  assets: false,
 }
 
 const INFRA_COLOR: Record<string, string> = {
@@ -176,6 +213,37 @@ const INFRA_COLOR: Record<string, string> = {
   pumping_station: '#c98a17',
   substation: '#d1600f',
   bridge: '#8496ae',
+}
+
+/** DEM flood-susceptibility ramp: the blue-er the node, the more likely it is
+ *  to hold standing water. This is the spatial input the risk engine leans
+ *  on, drawn directly from /api/terrain so map and engine cannot disagree. */
+function terrainColor(floodSusceptibility: number): string {
+  if (floodSusceptibility >= 0.7) return '#1d4ed8'
+  if (floodSusceptibility >= 0.5) return '#3b82f6'
+  if (floodSusceptibility >= 0.3) return '#7dd3fc'
+  return '#9db2c5'
+}
+
+const TRAFFIC_COLOR: Record<string, string> = {
+  freeflow: '#22c55e',
+  light: '#3b82f6',
+  moderate: '#f5b942',
+  heavy: '#f97316',
+  blocked: '#ef4444',
+  unknown: '#8496ae',
+}
+
+const SHELTER_COLOR: Record<string, string> = {
+  ready: '#3fbf8f',
+  at_risk: '#f5b942',
+  impacted: '#ef4444',
+}
+
+const HOSPITAL_COLOR: Record<string, string> = {
+  operational: '#4d9ff0',
+  diverting: '#f97316',
+  stretched: '#ef4444',
 }
 
 export function RiskMap({
@@ -191,6 +259,14 @@ export function RiskMap({
   selectedCellId,
   onSelectCell,
   route,
+  shelters,
+  fitRoute = false,
+  terrain,
+  storm,
+  stormTrack,
+  traffic,
+  responseShelters,
+  responseHospitals,
   children,
 }: {
   layers: MapLayers | null
@@ -205,6 +281,24 @@ export function RiskMap({
   selectedCellId?: string | null
   onSelectCell?: (id: string) => void
   route?: MapRoute | null
+  /** Shelters to pin with always-visible labels (nearest one highlighted). */
+  shelters?: ShelterMark[]
+  /**
+   * When a route is given, fit the view to the route instead of the zone
+   * layer — a 0.6 km walk is invisible at district zoom, and the citizen's
+   * question is "where do I walk?", not "where are all wards?".
+   */
+  fitRoute?: boolean
+  /** DEM/terrain grid for the elevation overlay (Phase G). */
+  terrain?: TerrainGrid | null
+  /** Active weather system + its short lead track (Phase G). */
+  storm?: StormState | null
+  stormTrack?: StormTrack | null
+  /** Named road corridors derived from the risk field (Phase G). */
+  traffic?: TrafficState | null
+  /** Response assets with derived readiness/status (Phase G). */
+  responseShelters?: Shelter[] | null
+  responseHospitals?: Hospital[] | null
   /**
    * Rendered INSIDE the MapContainer — anything passed here may safely use
    * react-leaflet hooks like useMap() (e.g. the WindParticles canvas).
@@ -218,10 +312,14 @@ export function RiskMap({
   }, [queue])
 
   const bounds = useMemo<L.LatLngBoundsExpression | null>(() => {
+    if (route && fitRoute) {
+      // pad so the endpoints + their labels get breathing room
+      return L.latLngBounds([route.from, route.to]).pad(1.4)
+    }
     if (!layers?.zones?.length) return null
     const pts = layers.zones.map((z) => [z.latitude, z.longitude] as [number, number])
     return L.latLngBounds(pts).pad(0.15)
-  }, [layers])
+  }, [layers, route, fitRoute])
 
   const center: [number, number] = [18.52, 73.86]
 
@@ -240,36 +338,93 @@ export function RiskMap({
         bounds && <Graticule bounds={bounds} />
       )}
 
-      <FitBounds bounds={bounds} />
+      <FitBounds
+        bounds={bounds}
+        routeKey={
+          route
+            ? `route:${route.from[0].toFixed(4)},${route.from[1].toFixed(4)},${route.to[0].toFixed(4)},${route.to[1].toFixed(4)}`
+            : undefined
+        }
+      />
       <MapSizeWatcher />
 
       {/* ---------------------------------------------- journey route -- */}
       {route && (
         <Pane name="pehra-route" style={{ zIndex: 420 }}>
+          {/* the blue line: exactly where to walk */}
           <Polyline
             positions={[route.from, route.to]}
-            pathOptions={{ color: '#4d9ff0', weight: 4, opacity: 0.9, dashArray: '10 6' }}
+            pathOptions={{ color: '#4d9ff0', weight: 5, opacity: 0.95, dashArray: '12 7' }}
           />
           {/* start: the user */}
           <CircleMarker
             center={route.from}
-            radius={7}
+            radius={8}
             pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#4d9ff0', fillOpacity: 1 }}
           >
-            <Tooltip direction="top" offset={[0, -8]} opacity={1}>
+            <Tooltip direction="top" offset={[0, -10]} opacity={1}>
               <span className="text-[11px] font-semibold text-ink-50">You are here</span>
             </Tooltip>
           </CircleMarker>
           {/* destination: the shelter */}
           <CircleMarker
             center={route.to}
-            radius={7}
+            radius={8}
             pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#3fbf8f', fillOpacity: 1 }}
           >
-            <Tooltip direction="top" offset={[0, -8]} opacity={1}>
+            <Tooltip direction="top" offset={[0, -10]} opacity={1}>
               <span className="text-[11px] font-semibold text-ink-50">Nearest shelter</span>
             </Tooltip>
           </CircleMarker>
+          {/* always-visible labels so a non-technical user reads the route
+              without hovering or zooming */}
+          <Marker
+            position={route.from}
+            interactive={false}
+            icon={L.divIcon({
+              className: '',
+              html: `<div style="transform:translate(-50%,10px);white-space:nowrap;font:700 10px/1 Inter,system-ui,sans-serif;color:#dbeafe;background:rgba(10,20,35,.85);border:1px solid #4d9ff0;border-radius:8px;padding:2px 6px;pointer-events:none">YOU ARE HERE</div>`,
+            })}
+          />
+          <Marker
+            position={route.to}
+            interactive={false}
+            icon={L.divIcon({
+              className: '',
+              html: `<div style="transform:translate(-50%,-16px);white-space:nowrap;font:700 10px/1 Inter,system-ui,sans-serif;color:#04150d;background:#3fbf8f;border:1px solid rgba(255,255,255,.4);border-radius:8px;padding:2px 6px;pointer-events:none">${route.label ?? 'NEAREST SHELTER'}</div>`,
+            })}
+          />
+        </Pane>
+      )}
+
+      {/* ------------------------------------------- shelter markers -- */}
+      {shelters && shelters.length > 0 && (
+        <Pane name="pehra-shelters" style={{ zIndex: 430 }}>
+          {shelters.map((s) => (
+            <Marker
+              key={s.id}
+              position={[s.lat, s.lng]}
+              icon={L.divIcon({
+                className: '',
+                html: `<div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-100%);pointer-events:none">
+                  <div style="white-space:nowrap;font:700 10px/1.2 Inter,system-ui,sans-serif;color:${s.nearest ? '#04150d' : '#d1fae5'};background:${s.nearest ? '#3fbf8f' : 'rgba(8,46,34,.92)'};border:1.5px solid ${s.nearest ? 'rgba(255,255,255,.55)' : '#3fbf8f'};border-radius:10px;padding:3px 7px;box-shadow:0 1px 5px rgba(0,0,0,.5)">${s.nearest ? '★ NEAREST · ' : ''}${s.name.toUpperCase()}</div>
+                  <div style="width:2px;height:9px;background:#3fbf8f"></div>
+                </div>`,
+              })}
+            >
+              <Tooltip direction="top" offset={[0, -14]} opacity={1}>
+                <div className="text-[11px]">
+                  <div className="font-semibold text-ink-50">{s.name}</div>
+                  {s.distanceKm != null && (
+                    <div className="text-ink-400">
+                      {s.distanceKm.toFixed(1)} km away
+                      {s.nearest ? ' · walk this blue line' : ''}
+                    </div>
+                  )}
+                </div>
+              </Tooltip>
+            </Marker>
+          ))}
         </Pane>
       )}
 
@@ -292,6 +447,82 @@ export function RiskMap({
               />
             )
           })}
+        </Pane>
+      )}
+
+      {/* ------------------------------------------- DEM/terrain layer -- */}
+      {toggles.terrain && terrain && terrain.points.length > 0 && (
+        <Pane name="pehra-terrain" style={{ zIndex: 310 }}>
+          {terrain.points.map((p, i) => (
+            <CircleMarker
+              key={i}
+              center={[p.lat, p.lng]}
+              radius={3}
+              pathOptions={{
+                color: 'transparent',
+                fillColor: terrainColor(p.flood_susceptibility),
+                fillOpacity: 0.4,
+                weight: 0,
+                interactive: false,
+              }}
+            />
+          ))}
+        </Pane>
+      )}
+
+      {/* ---------------------------------------- storm system + track -- */}
+      {toggles.storm && storm?.system && (
+        <Pane name="pehra-storm" style={{ zIndex: 425 }}>
+          {storm.track.length > 1 && (
+            <Polyline
+              positions={storm.track.map((p) => [p.lat, p.lng] as [number, number])}
+              pathOptions={{ color: '#7c3aed', weight: 3, opacity: 0.9, dashArray: '8 5' }}
+            />
+          )}
+          {stormTrack && stormTrack.points.length > 1 && (
+            <Polyline
+              positions={stormTrack.points.map((p) => [p.lat, p.lng] as [number, number])}
+              pathOptions={{ color: '#9f7aea', weight: 1.5, opacity: 0.5, dashArray: '2 6' }}
+            />
+          )}
+          {storm.system.active && (
+            <>
+              <Circle
+                center={[storm.system.latitude, storm.system.longitude]}
+                radius={Math.max(storm.system.radius_km * 1000, 4000)}
+                pathOptions={{
+                  color: '#7c3aed',
+                  weight: 1.5,
+                  fillColor: '#7c3aed',
+                  fillOpacity: 0.06,
+                  dashArray: '4 6',
+                }}
+              >
+                <Tooltip direction="top" opacity={1}>
+                  <div className="text-[11px]">
+                    <div className="font-semibold text-ink-50">{storm.system.name}</div>
+                    <div className="text-ink-300">{storm.system.type}</div>
+                    <div className="text-ink-400">
+                      winds {storm.intensity.wind_speed_kmh.toFixed(0)} km/h · surge{' '}
+                      {storm.intensity.surge_m.toFixed(2)} m · {storm.intensity.trend_3h}
+                    </div>
+                  </div>
+                </Tooltip>
+              </Circle>
+              <CircleMarker
+                center={[storm.system.latitude, storm.system.longitude]}
+                radius={7}
+                pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#7c3aed', fillOpacity: 1 }}
+              />
+            </>
+          )}
+          {storm.system.bearing_deg != null && storm.system.speed_kmh != null && (
+            <CircleMarker
+              center={[storm.system.latitude, storm.system.longitude]}
+              radius={2}
+              pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#ffffff', fillOpacity: 1 }}
+            />
+          )}
         </Pane>
       )}
 
@@ -430,6 +661,38 @@ export function RiskMap({
           )
         })}
 
+      {/* -------------------------------------------------- traffic -- */}
+      {toggles.traffic && traffic && traffic.corridors.length > 0 && (
+        <Pane name="pehra-traffic" style={{ zIndex: 415 }}>
+          {traffic.corridors.map((c) => (
+            <Polyline
+              key={c.id}
+              positions={[
+                [c.from.lat, c.from.lng],
+                [c.to.lat, c.to.lng],
+              ]}
+              pathOptions={{
+                color: TRAFFIC_COLOR[c.status] ?? '#8496ae',
+                weight: c.status === 'blocked' ? 6 : 4,
+                opacity: 0.9,
+              }}
+            >
+              <Tooltip sticky opacity={1}>
+                <div className="text-[11px]">
+                  <div className="font-medium text-ink-50">{c.name}</div>
+                  <div className="capitalize text-ink-300">
+                    {c.status} · {c.congestion.toFixed(0)}/100 congested
+                  </div>
+                  <div className="text-ink-400">
+                    {c.speed_kmh} km/h{c.bound_ward_risk != null ? ` · ward ${c.bound_ward_risk.toFixed(0)}/100` : ''}
+                  </div>
+                </div>
+              </Tooltip>
+            </Polyline>
+          ))}
+        </Pane>
+      )}
+
       {/* ------------------------------------------------ alert fences -- */}
       {toggles.alerts &&
         layers?.alerts?.map((a) => {
@@ -479,6 +742,66 @@ export function RiskMap({
             </Tooltip>
           </CircleMarker>
         ))}
+
+      {/* ---------------------------------- response assets (Phase G) -- */}
+      {toggles.assets && (
+        <Pane name="pehra-assets" style={{ zIndex: 432 }}>
+          {responseShelters?.map((s) => (
+            <CircleMarker
+              key={`s-${s.id}`}
+              center={[s.latitude, s.longitude]}
+              radius={6}
+              pathOptions={{
+                color: '#ffffff',
+                weight: 1.5,
+                fillColor: SHELTER_COLOR[s.readiness] ?? '#8496ae',
+                fillOpacity: 0.95,
+              }}
+            >
+              <Tooltip direction="top" opacity={1}>
+                <div className="text-[11px]">
+                  <div className="font-semibold text-ink-50">{s.name}</div>
+                  <div className="capitalize text-ink-300">
+                    shelter · {s.readiness.replace(/_/g, ' ')}
+                  </div>
+                  <div className="text-ink-400">
+                    {s.capacity ? `${s.capacity} capacity` : 'capacity unknown'}
+                    {s.host_ward_risk != null && s.host_ward_risk >= 60
+                      ? ` · ward ${s.host_ward_risk.toFixed(0)}/100`
+                      : ''}
+                  </div>
+                </div>
+              </Tooltip>
+            </CircleMarker>
+          ))}
+          {responseHospitals?.map((h) => (
+            <CircleMarker
+              key={`h-${h.id}`}
+              center={[h.latitude, h.longitude]}
+              radius={5}
+              pathOptions={{
+                color: '#ffffff',
+                weight: 1.5,
+                fillColor: HOSPITAL_COLOR[h.status] ?? '#4d9ff0',
+                fillOpacity: 0.95,
+              }}
+            >
+              <Tooltip direction="top" opacity={1}>
+                <div className="text-[11px]">
+                  <div className="font-semibold text-ink-50">{h.name}</div>
+                  <div className="capitalize text-ink-300">
+                    hospital · {h.status}
+                    {h.beds ? ` · ${h.beds} beds` : ''}
+                  </div>
+                  {h.host_ward_risk != null && h.host_ward_risk >= 60 && (
+                    <div className="text-ink-400">ward {h.host_ward_risk.toFixed(0)}/100</div>
+                  )}
+                </div>
+              </Tooltip>
+            </CircleMarker>
+          ))}
+        </Pane>
+      )}
 
       {/* ------------------------------------------------------ labels -- */}
       {toggles.labels &&

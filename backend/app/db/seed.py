@@ -28,104 +28,190 @@ from app.security.passwords import hash_password
 from app.simulation.scenarios import SCENARIOS
 
 # ---------------------------------------------------------------------------
-# Locations -- Pune district, Maharashtra
+# Locations -- Mumbai metropolitan core (island city + western/eastern suburbs)
+# Elevation, slope and coastal exposure feed the DEM engine directly; low-lying
+# reclaimed areas (BKC, Kurla, Mahim, Worli, Juhu) are the genuinely risky ones.
 # ---------------------------------------------------------------------------
 LOCATIONS = [
     dict(
-        id="loc_sinhagad_road", name="Sinhagad Road Ward", name_hi="सिंहगड रोड वॉर्ड",
-        admin_type="ward", district="Pune", state="Maharashtra",
-        latitude=18.4575, longitude=73.8237, elevation_m=555.0, area_km2=8.4,
-        population=142000, vulnerable_population=21300, households=32100,
-        terrain_vulnerability=0.78, drainage_deficiency=0.62, river_id="river_mutha",
+        id="loc_colaba", name="Colaba Ward", name_hi="कुलाबा वॉर्ड",
+        admin_type="ward", district="Mumbai City", state="Maharashtra",
+        latitude=18.9045, longitude=72.8111, elevation_m=6.5, slope_deg=1.5,
+        coastal_exposure=0.92, area_km2=3.7,
+        population=132000, vulnerable_population=26400, households=31000,
+        terrain_vulnerability=0.62, drainage_deficiency=0.55, river_id=None,
+        primary_hazards=["coastal_flood", "extreme_rain", "severe_wind", "urban_flood"],
+    ),
+    dict(
+        id="loc_fort", name="Fort Ward", name_hi="फोर्ट वॉर्ड",
+        admin_type="ward", district="Mumbai City", state="Maharashtra",
+        latitude=18.9350, longitude=72.8320, elevation_m=8.0, slope_deg=1.3,
+        coastal_exposure=0.55, area_km2=2.2,
+        population=93000, vulnerable_population=18600, households=22000,
+        terrain_vulnerability=0.52, drainage_deficiency=0.45, river_id=None,
+        primary_hazards=["coastal_flood", "urban_flood", "extreme_rain"],
+    ),
+    dict(
+        id="loc_malabar_hill", name="Malabar Hill Ward", name_hi="मालाबार हिल वॉर्ड",
+        admin_type="ward", district="Mumbai City", state="Maharashtra",
+        latitude=18.9480, longitude=72.7990, elevation_m=48.0, slope_deg=8.0,
+        coastal_exposure=0.50, area_km2=2.5,
+        population=68000, vulnerable_population=6800, households=18000,
+        terrain_vulnerability=0.40, drainage_deficiency=0.30, river_id=None,
+        primary_hazards=["severe_wind", "extreme_rain"],
+    ),
+    dict(
+        id="loc_byculla", name="Byculla Ward", name_hi="बायकुला वॉर्ड",
+        admin_type="ward", district="Mumbai City", state="Maharashtra",
+        latitude=18.9787, longitude=72.8343, elevation_m=6.0, slope_deg=1.0,
+        coastal_exposure=0.05, area_km2=3.4,
+        population=201000, vulnerable_population=44200, households=47000,
+        terrain_vulnerability=0.68, drainage_deficiency=0.74, river_id=None,
+        primary_hazards=["urban_flood", "extreme_rain"],
+    ),
+    dict(
+        id="loc_worli", name="Worli Ward", name_hi="वरळी वॉर्ड",
+        admin_type="ward", district="Mumbai City", state="Maharashtra",
+        latitude=19.0160, longitude=72.8160, elevation_m=5.0, slope_deg=1.2,
+        coastal_exposure=0.75, area_km2=4.6,
+        population=154000, vulnerable_population=32300, households=36000,
+        terrain_vulnerability=0.64, drainage_deficiency=0.78, river_id=None,
+        primary_hazards=["coastal_flood", "urban_flood", "severe_wind", "extreme_rain"],
+    ),
+    dict(
+        id="loc_dadar", name="Dadar Ward", name_hi="दादर वॉर्ड",
+        admin_type="ward", district="Mumbai City", state="Maharashtra",
+        latitude=19.0210, longitude=72.8420, elevation_m=9.0, slope_deg=1.5,
+        coastal_exposure=0.0, area_km2=3.9,
+        population=187000, vulnerable_population=33600, households=44000,
+        terrain_vulnerability=0.60, drainage_deficiency=0.60, river_id=None,
+        primary_hazards=["urban_flood", "extreme_rain"],
+    ),
+    dict(
+        id="loc_parel", name="Parel Ward", name_hi="परळ वॉर्ड",
+        admin_type="ward", district="Mumbai City", state="Maharashtra",
+        latitude=19.0070, longitude=72.8400, elevation_m=5.5, slope_deg=0.9,
+        coastal_exposure=0.0, area_km2=4.0,
+        population=173000, vulnerable_population=38100, households=41000,
+        terrain_vulnerability=0.66, drainage_deficiency=0.75, river_id=None,
+        primary_hazards=["urban_flood", "extreme_rain"],
+    ),
+    dict(
+        id="loc_mahim", name="Mahim Ward", name_hi="माहिम वॉर्ड",
+        admin_type="ward", district="Mumbai Suburban", state="Maharashtra",
+        latitude=19.0380, longitude=72.8440, elevation_m=4.5, slope_deg=0.8,
+        coastal_exposure=0.75, area_km2=3.1,
+        population=121000, vulnerable_population=29000, households=28000,
+        terrain_vulnerability=0.70, drainage_deficiency=0.85, river_id=None,
+        primary_hazards=["coastal_flood", "urban_flood", "flood", "severe_wind"],
+    ),
+    dict(
+        id="loc_bandra", name="Bandra West Ward", name_hi="बांद्रा वेस्ट वॉर्ड",
+        admin_type="ward", district="Mumbai Suburban", state="Maharashtra",
+        latitude=19.0596, longitude=72.8295, elevation_m=12.0, slope_deg=5.0,
+        coastal_exposure=0.55, area_km2=3.6,
+        population=148000, vulnerable_population=22200, households=36000,
+        terrain_vulnerability=0.58, drainage_deficiency=0.50, river_id=None,
+        primary_hazards=["coastal_flood", "severe_wind", "urban_flood"],
+    ),
+    dict(
+        id="loc_bkc", name="Bandra–Kurla Complex Ward", name_hi="बांद्रा-कुर्ला कॉम्प्लेक्स वॉर्ड",
+        admin_type="ward", district="Mumbai Suburban", state="Maharashtra",
+        latitude=19.0700, longitude=72.8650, elevation_m=3.0, slope_deg=0.5,
+        coastal_exposure=0.35, area_km2=6.4,
+        population=96000, vulnerable_population=21100, households=18000,
+        terrain_vulnerability=0.72, drainage_deficiency=0.90, river_id="river_mithi",
+        primary_hazards=["coastal_flood", "flood", "urban_flood", "extreme_rain"],
+    ),
+    dict(
+        id="loc_sion", name="Sion Ward", name_hi="शीव वॉर्ड",
+        admin_type="ward", district="Mumbai Suburban", state="Maharashtra",
+        latitude=19.0440, longitude=72.8620, elevation_m=11.0, slope_deg=2.2,
+        coastal_exposure=0.0, area_km2=4.8,
+        population=155000, vulnerable_population=32600, households=36000,
+        terrain_vulnerability=0.59, drainage_deficiency=0.50, river_id=None,
+        primary_hazards=["urban_flood", "extreme_rain"],
+    ),
+    dict(
+        id="loc_kurla", name="Kurla Ward", name_hi="कुर्ला वॉर्ड",
+        admin_type="ward", district="Mumbai Suburban", state="Maharashtra",
+        latitude=19.0700, longitude=72.8800, elevation_m=4.0, slope_deg=0.7,
+        coastal_exposure=0.15, area_km2=5.1,
+        population=242000, vulnerable_population=72600, households=56000,
+        terrain_vulnerability=0.76, drainage_deficiency=0.85, river_id="river_mithi",
         primary_hazards=["flood", "urban_flood", "extreme_rain"],
     ),
     dict(
-        id="loc_katraj", name="Katraj–Ambegaon Ward", name_hi="कात्रज–आंबेगाव वॉर्ड",
-        admin_type="ward", district="Pune", state="Maharashtra",
-        latitude=18.4483, longitude=73.8570, elevation_m=610.0, area_km2=7.1,
-        population=118000, vulnerable_population=15300, households=27400,
-        terrain_vulnerability=0.66, drainage_deficiency=0.81, river_id=None,
-        primary_hazards=["urban_flood", "extreme_rain", "thunderstorm"],
+        id="loc_chembur", name="Chembur Ward", name_hi="शेंबूर वॉर्ड",
+        admin_type="ward", district="Mumbai Suburban", state="Maharashtra",
+        latitude=19.0580, longitude=72.8960, elevation_m=13.0, slope_deg=2.5,
+        coastal_exposure=0.10, area_km2=8.2,
+        population=228000, vulnerable_population=47800, households=52000,
+        terrain_vulnerability=0.57, drainage_deficiency=0.55, river_id=None,
+        primary_hazards=["urban_flood", "extreme_rain"],
     ),
     dict(
-        id="loc_hadapsar", name="Hadapsar–Mundhwa Ward", name_hi="हडपसर–मुंढवा वॉर्ड",
-        admin_type="ward", district="Pune", state="Maharashtra",
-        latitude=18.5089, longitude=73.9260, elevation_m=545.0, area_km2=10.5,
-        population=187000, vulnerable_population=29900, households=42500,
-        terrain_vulnerability=0.71, drainage_deficiency=0.74, river_id="river_mula_mutha",
-        primary_hazards=["flood", "urban_flood"],
+        id="loc_vikhroli", name="Vikhroli Ward", name_hi="विक्रोळी वॉर्ड",
+        admin_type="ward", district="Mumbai Suburban", state="Maharashtra",
+        latitude=19.1120, longitude=72.9300, elevation_m=7.0, slope_deg=1.2,
+        coastal_exposure=0.35, area_km2=9.6,
+        population=136000, vulnerable_population=29900, households=30000,
+        terrain_vulnerability=0.61, drainage_deficiency=0.70, river_id=None,
+        primary_hazards=["coastal_flood", "urban_flood", "extreme_rain"],
     ),
     dict(
-        id="loc_baner", name="Baner–Balewadi Ward", name_hi="बाणेर–बालेवाडी वॉर्ड",
-        admin_type="ward", district="Pune", state="Maharashtra",
-        latitude=18.5590, longitude=73.7868, elevation_m=590.0, area_km2=9.2,
-        population=96000, vulnerable_population=9600, households=24800,
-        terrain_vulnerability=0.42, drainage_deficiency=0.48, river_id="river_mula",
-        primary_hazards=["urban_flood", "thunderstorm"],
+        id="loc_andheri", name="Andheri East Ward", name_hi="अंधेरी पूर्व वॉर्ड",
+        admin_type="ward", district="Mumbai Suburban", state="Maharashtra",
+        latitude=19.1196, longitude=72.8465, elevation_m=22.0, slope_deg=3.0,
+        coastal_exposure=0.0, area_km2=10.4,
+        population=311000, vulnerable_population=59000, households=71000,
+        terrain_vulnerability=0.60, drainage_deficiency=0.45, river_id=None,
+        primary_hazards=["urban_flood", "heat", "thunderstorm"],
     ),
     dict(
-        id="loc_pimpri", name="Pimpri Camp Ward", name_hi="पिंपरी कॅम्प वॉर्ड",
-        admin_type="ward", district="Pune", state="Maharashtra",
-        latitude=18.6280, longitude=73.8010, elevation_m=560.0, area_km2=6.8,
-        population=165000, vulnerable_population=28100, households=38200,
-        terrain_vulnerability=0.69, drainage_deficiency=0.77, river_id="river_pavana",
-        primary_hazards=["flood", "urban_flood", "severe_wind"],
+        id="loc_juhu", name="Juhu–Vile Parle Ward", name_hi="जुहू-विले पार्ले वॉर्ड",
+        admin_type="ward", district="Mumbai Suburban", state="Maharashtra",
+        latitude=19.1070, longitude=72.8260, elevation_m=4.0, slope_deg=0.6,
+        coastal_exposure=0.95, area_km2=5.3,
+        population=98000, vulnerable_population=17600, households=24000,
+        terrain_vulnerability=0.63, drainage_deficiency=0.55, river_id=None,
+        primary_hazards=["coastal_flood", "severe_wind", "urban_flood", "flood"],
     ),
     dict(
-        id="loc_chinchwad", name="Chinchwad Ward", name_hi="चिंचवड वॉर्ड",
-        admin_type="ward", district="Pune", state="Maharashtra",
-        latitude=18.6410, longitude=73.7930, elevation_m=570.0, area_km2=8.9,
-        population=154000, vulnerable_population=20000, households=36000,
-        terrain_vulnerability=0.55, drainage_deficiency=0.63, river_id="river_pavana",
-        primary_hazards=["urban_flood", "severe_wind", "thunderstorm"],
+        id="loc_powai", name="Powai Ward", name_hi="पवई वॉर्ड",
+        admin_type="ward", district="Mumbai Suburban", state="Maharashtra",
+        latitude=19.1180, longitude=72.9070, elevation_m=33.0, slope_deg=6.0,
+        coastal_exposure=0.05, area_km2=7.4,
+        population=94000, vulnerable_population=9400, households=23000,
+        terrain_vulnerability=0.45, drainage_deficiency=0.35, river_id="river_mithi",
+        primary_hazards=["flood", "thunderstorm"],
     ),
     dict(
-        id="loc_khadakwasla", name="Khadakwasla Village", name_hi="खडकवासला गाव",
-        admin_type="village", district="Pune", state="Maharashtra",
-        latitude=18.4404, longitude=73.7686, elevation_m=600.0, area_km2=5.5,
-        population=6800, vulnerable_population=1500, households=1600,
-        terrain_vulnerability=0.88, drainage_deficiency=0.45, river_id="river_mutha",
-        primary_hazards=["flood", "extreme_rain"],
+        id="loc_mulund", name="Mulund Ward", name_hi="मुलुंड वॉर्ड",
+        admin_type="ward", district="Mumbai Suburban", state="Maharashtra",
+        latitude=19.1720, longitude=72.9570, elevation_m=7.5, slope_deg=1.4,
+        coastal_exposure=0.30, area_km2=9.4,
+        population=178000, vulnerable_population=32000, households=42000,
+        terrain_vulnerability=0.55, drainage_deficiency=0.55, river_id=None,
+        primary_hazards=["coastal_flood", "urban_flood", "extreme_rain"],
     ),
     dict(
-        id="loc_mulshi", name="Mulshi Village", name_hi="मुळशी गाव",
-        admin_type="village", district="Pune", state="Maharashtra",
-        latitude=18.5100, longitude=73.5100, elevation_m=620.0, area_km2=12.0,
-        population=4200, vulnerable_population=980, households=1050,
-        terrain_vulnerability=0.74, drainage_deficiency=0.30, river_id="river_mula",
-        primary_hazards=["flood", "extreme_rain"],
+        id="loc_borivali", name="Borivali Ward", name_hi="बोरिवली वॉर्ड",
+        admin_type="ward", district="Mumbai Suburban", state="Maharashtra",
+        latitude=19.2290, longitude=72.8550, elevation_m=19.0, slope_deg=4.0,
+        coastal_exposure=0.05, area_km2=12.0,
+        population=262000, vulnerable_population=47100, households=62000,
+        terrain_vulnerability=0.50, drainage_deficiency=0.40, river_id="river_dahisar",
+        primary_hazards=["flood", "heat", "extreme_rain"],
     ),
     dict(
-        id="loc_velhe", name="Velhe Village", name_hi="वेल्हे गाव",
-        admin_type="village", district="Pune", state="Maharashtra",
-        latitude=18.3000, longitude=73.6300, elevation_m=730.0, area_km2=8.0,
-        population=3100, vulnerable_population=760, households=780,
-        terrain_vulnerability=0.81, drainage_deficiency=0.22, river_id=None,
-        primary_hazards=["extreme_rain", "thunderstorm"],
-    ),
-    dict(
-        id="loc_bhor", name="Bhor Town", name_hi="भोर शहर",
-        admin_type="block", district="Pune", state="Maharashtra",
-        latitude=18.1500, longitude=73.8430, elevation_m=620.0, area_km2=9.0,
-        population=21000, vulnerable_population=4200, households=5100,
-        terrain_vulnerability=0.63, drainage_deficiency=0.51, river_id="river_nira",
-        primary_hazards=["flood", "extreme_rain"],
-    ),
-    dict(
-        id="loc_junnar", name="Junnar Town", name_hi="जुन्नर शहर",
-        admin_type="block", district="Pune", state="Maharashtra",
-        latitude=19.2000, longitude=73.8750, elevation_m=680.0, area_km2=11.0,
-        population=28000, vulnerable_population=5600, households=6800,
-        terrain_vulnerability=0.58, drainage_deficiency=0.44, river_id="river_kukadi",
-        primary_hazards=["flood", "thunderstorm", "severe_wind"],
-    ),
-    dict(
-        id="loc_daund", name="Daund Town", name_hi="दौंड शहर",
-        admin_type="block", district="Pune", state="Maharashtra",
-        latitude=18.4640, longitude=74.5800, elevation_m=520.0, area_km2=14.0,
-        population=68000, vulnerable_population=13600, households=15900,
-        terrain_vulnerability=0.36, drainage_deficiency=0.40, river_id="river_bhima",
-        primary_hazards=["heat", "flood", "severe_wind"],
+        id="loc_goregaon", name="Goregaon Ward", name_hi="गोरेगाव वॉर्ड",
+        admin_type="ward", district="Mumbai Suburban", state="Maharashtra",
+        latitude=19.1650, longitude=72.8480, elevation_m=28.0, slope_deg=3.5,
+        coastal_exposure=0.15, area_km2=11.2,
+        population=224000, vulnerable_population=35800, households=53000,
+        terrain_vulnerability=0.48, drainage_deficiency=0.40, river_id="river_oshawara",
+        primary_hazards=["heat", "urban_flood", "thunderstorm"],
     ),
 ]
 
@@ -153,62 +239,75 @@ def _square_polygon(lat: float, lng: float, area_km2: float):
 # Critical infrastructure (demo dataset)
 # ---------------------------------------------------------------------------
 INFRA_TEMPLATE = [
-    ("hospital", "Community Health Centre", 0.95, 120, 0.004, 0.003),
-    ("school", "Zilla Parishad School", 0.7, 450, -0.005, 0.004),
+    ("hospital", "Neighbourhood Health Post", 0.95, 120, 0.004, 0.003),
+    ("school", "Municipal School Building", 0.7, 450, -0.005, 0.004),
     ("shelter", "Municipal Relief Shelter", 0.85, 300, 0.003, -0.005),
-    ("bridge", "River Crossing Bridge", 0.8, None, -0.003, -0.004),
+    ("bridge", "Creek Crossing Bridge", 0.8, None, -0.003, -0.004),
     ("power", "Distribution Substation", 0.75, None, 0.005, 0.005),
 ]
 
 EXTRA_INFRA = {
-    "loc_sinhagad_road": [("hospital", "Sinhagad Road Multispeciality Hospital", 0.98, 240, 0.006, -0.002),
-                          ("shelter", "Vitthalwadi Community Hall Shelter", 0.8, 400, -0.004, 0.006)],
-    "loc_hadapsar": [("hospital", "Hadapsar General Hospital", 0.97, 300, -0.006, 0.002),
-                     ("water", "Mundhwa Water Treatment Plant", 0.9, None, 0.004, 0.006)],
-    "loc_pimpri": [("hospital", "Pimpri Civic Hospital", 0.96, 350, 0.005, 0.004),
-                   ("shelter", "Camp Ground Relief Shelter", 0.82, 600, -0.005, -0.003)],
-    "loc_khadakwasla": [("bridge", "Khadakwasla Causeway", 0.92, None, 0.002, 0.004)],
-    "loc_daund": [("shelter", "Daund Rail Colony Shelter", 0.78, 250, 0.006, -0.006)],
+    "loc_fort": [("hospital", "St George Municipal Hospital", 0.9, 250, -0.004, -0.002),
+                 ("shelter", "Cusrow Baug Open Ground Shelter", 0.8, 500, 0.004, 0.003)],
+    "loc_byculla": [("hospital", "J. J. Group of Hospitals", 0.98, 800, -0.006, -0.002),
+                    ("hospital", "Nair Municipal Hospital", 0.95, 550, 0.005, -0.004)],
+    "loc_parel": [("hospital", "KEM Hospital, Parel", 0.99, 900, -0.004, 0.004)],
+    "loc_malabar_hill": [("hospital", "Breach Candy Hospital", 0.97, 350, 0.003, 0.003)],
+    "loc_worli": [("water", "Worli Sea-Face Drainage Outfall", 0.92, None, 0.004, -0.004)],
+    "loc_sion": [("hospital", "Lokmanya Tilak General Hospital (Sion)", 0.97, 700, 0.003, -0.005)],
+    "loc_bandra": [("hospital", "Lilavati Hospital", 0.98, 500, 0.005, -0.003),
+                   ("bridge", "Bandra–Worli Sea Link Approach", 0.95, None, -0.005, 0.005)],
+    "loc_mahim": [("hospital", "PD Hinduja National Hospital", 0.98, 600, -0.004, 0.004),
+                  ("water", "Mithi Estuary Pumping Station", 0.9, None, 0.004, -0.002)],
+    "loc_bkc": [("bridge", "Mithi River Bridge, BKC", 0.85, None, -0.003, -0.004),
+                ("water", "BKC Storm Water Pumping Station", 0.92, None, 0.004, -0.004)],
+    "loc_kurla": [("water", "Kurla Drainage Pumping Station", 0.9, None, 0.003, 0.004)],
+    "loc_powai": [("hospital", "Fortis Hiranandani Hospital", 0.98, 400, 0.004, -0.004)],
+    "loc_andheri": [("hospital", "Cooper Municipal Hospital", 0.95, 450, -0.004, 0.003),
+                    ("hospital", "Nanavati Max Hospital, Vile Parle", 0.96, 500, 0.006, 0.002)],
+    "loc_mulund": [("hospital", "Fortis Hospital, Mulund", 0.95, 500, -0.005, 0.002)],
+    "loc_borivali": [("hospital", "Shatabdi Multispeciality Hospital", 0.93, 420, 0.002, -0.006)],
+    "loc_goregaon": [("water", "Veer Savarkar Drainage Pumping Station", 0.88, None, -0.004, 0.004)],
 }
 
 
 # ---------------------------------------------------------------------------
-# Historical incident archive (demo)
+# Historical incident archive (demo) -- Mumbai flood history
 # ---------------------------------------------------------------------------
 HISTORICAL_INCIDENTS = [
-    dict(location_id="loc_sinhagad_road", hazard="flood", days_ago=412,
-         title="Mutha overflow — Sinhagad Road low-lying stretch", peak_risk=88.0,
-         summary="Sustained catchment rainfall with dam discharge; 1,900 residents temporarily relocated."),
-    dict(location_id="loc_katraj", hazard="urban_flood", days_ago=298,
-         title="Katraj cloudburst waterlogging", peak_risk=79.0,
-         summary="68 mm in 90 minutes overwhelmed storm drains; underpass closed for 6 hours."),
-    dict(location_id="loc_hadapsar", hazard="flood", days_ago=205,
-         title="Mula-Mutha bank inundation at Mundhwa", peak_risk=83.0,
-         summary="Riverside settlements flooded after upstream release."),
-    dict(location_id="loc_pimpri", hazard="severe_wind", days_ago=156,
-         title="Pre-monsoon squall, Pimpri Camp", peak_risk=72.0,
-         summary="Gusts to 96 km/h; hoardings and 140 trees down."),
-    dict(location_id="loc_khadakwasla", hazard="flood", days_ago=389,
-         title="Khadakwasla causeway submersion", peak_risk=91.0,
-         summary="Causeway submerged for 11 hours after high dam discharge."),
-    dict(location_id="loc_daund", hazard="heat", days_ago=118,
-         title="Daund heat episode", peak_risk=76.0,
-         summary="Four consecutive days above 44 °C; cooling centres activated."),
-    dict(location_id="loc_junnar", hazard="flood", days_ago=340,
-         title="Kukadi tributary flash flood", peak_risk=81.0,
-         summary="Rapid rise in a hill tributary after 120 mm in the upper catchment."),
+    dict(location_id="loc_kurla", hazard="flood", days_ago=7730,
+         title="Mithi river overflow across Dharavi–Kurla (26 Jul 2005)", peak_risk=99.0,
+         summary="944 mm of rain in 24 hours overwhelmed the Mithi; Dharavi and Kurla flooded up to 3 m, thousands relocated."),
+    dict(location_id="loc_bkc", hazard="flood", days_ago=3302,
+         title="Mithi embankment breach at BKC (29 Aug 2017)", peak_risk=92.0,
+         summary="240 mm in a few hours plus a breached Mithi bank flooded the Bandra–Kurla Complex business district."),
+    dict(location_id="loc_chembur", hazard="urban_flood", days_ago=3302,
+         title="Chembur cloudburst waterlogging (29 Aug 2017)", peak_risk=90.0,
+         summary="273 mm of rain in one tide window; drains overwhelmed, roads waterlogged for many hours."),
+    dict(location_id="loc_sion", hazard="urban_flood", days_ago=1881,
+         title="Low-lying Sion flash flood (14 Jul 2021)", peak_risk=87.0,
+         summary="45-minute squall dumped over 40 mm; low-lying Sion lanes waterlogged knee-deep."),
+    dict(location_id="loc_mahim", hazard="coastal_flood", days_ago=1570,
+         title="High tide backed-up Mahim outfall (27 May 2022)", peak_risk=84.0,
+         summary="Short intense burst at a spring high tide; drains could not discharge and Mahim causeway flooded."),
+    dict(location_id="loc_fort", hazard="coastal_flood", days_ago=1568,
+         title="Sea water surge near Gateway of India", peak_risk=78.0,
+         summary="Onshore gale pushed sea water into the Fort esplanade during a storm swell."),
+    dict(location_id="loc_juhu", hazard="coastal_flood", days_ago=769,
+         title="Juhu beach road coastal inundation", peak_risk=80.0,
+         summary="High tide combined with rough Arabian Sea swell overtopped the Juhu promenade."),
 ]
 
 # demo users -- passwords come from a constant here ONLY because this is a
 # prototype seed. Real deployments create users through the admin API.
 SEED_USERS = [
     dict(username="citizen", full_name="Demo Citizen", role="citizen",
-         password="citizen123", home_location_id="loc_sinhagad_road", language="en"),
+         password="citizen123", home_location_id="loc_colaba", language="en"),
     dict(username="nagrik", full_name="डेमो नागरिक", role="citizen",
-         password="citizen123", home_location_id="loc_katraj", language="hi"),
-    dict(username="authority", full_name="Demo District Officer", role="authority",
+         password="citizen123", home_location_id="loc_kurla", language="hi"),
+    dict(username="authority", full_name="Demo Municipal Officer", role="authority",
          password="authority123", home_location_id=None, language="en",
-         organisation="Pune District Disaster Management Authority (demo)"),
+         organisation="Brihanmumbai Municipal Corporation — Disaster Management Cell (demo)"),
     dict(username="admin", full_name="Demo Administrator", role="administrator",
          password="admin12345", home_location_id=None, language="en",
          organisation="PEHRA System Administration (demo)"),
@@ -267,8 +366,8 @@ def seed_all(db: Session, *, force: bool = False) -> dict:
             # to. Deterministic per row so re-seeding never changes them.
             if kind in ("shelter", "hospital") and not row.address:
                 h = int(hashlib.md5(iid.encode()).hexdigest()[:8], 16)
-                row.address = f"{area} municipal campus, Pune, Maharashtra {411001 + (h % 99)}"
-                row.phone = f"+91 98220 {10000 + (h % 89999)}"
+                row.address = f"{area} municipal campus, Mumbai, Maharashtra {400001 + (h % 99)}"
+                row.phone = f"+91 98200 {10000 + (h % 89999)}"
 
     # Backfill rows created before contact details existed (idempotent).
     for row in db.query(Infrastructure).filter(
@@ -278,10 +377,10 @@ def seed_all(db: Session, *, force: bool = False) -> dict:
         area = (
             db.query(Location).filter(Location.id == row.location_id).first()
         )
-        area_name = (area.name.split("–")[0].split(" Ward")[0]) if area else "Pune"
+        area_name = (area.name.split("–")[0].split(" Ward")[0]) if area else "Mumbai"
         h = int(hashlib.md5(row.id.encode()).hexdigest()[:8], 16)
-        row.address = f"{area_name} municipal campus, Pune, Maharashtra {411001 + (h % 99)}"
-        row.phone = f"+91 98220 {10000 + (h % 89999)}"
+        row.address = f"{area_name} municipal campus, Mumbai, Maharashtra {400001 + (h % 99)}"
+        row.phone = f"+91 98200 {10000 + (h % 89999)}"
         created["infrastructure"] += 1
 
     # --- users ---
@@ -379,7 +478,7 @@ def seed_all(db: Session, *, force: bool = False) -> dict:
     if not state:
         db.add(
             SimulationState(
-                id=1, scenario_id="normal_day", tick=0, running=False, speed=1.0,
+                id=1, scenario_id="mumbai_normal", tick=0, running=False, speed=1.0,
                 overrides={}, connectivity="online", forced_failures={},
             )
         )

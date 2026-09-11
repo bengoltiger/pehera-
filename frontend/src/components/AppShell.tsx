@@ -22,6 +22,7 @@ import {
   Server,
   Siren,
   Sun,
+  Users,
   Waypoints,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
@@ -49,6 +50,7 @@ const AUTHORITY_NAV: NavItem[] = [
   { to: '/authority/map', label: 'nav.map', icon: <MapIcon size={15} /> },
   { to: '/authority/queue', label: 'nav.queue', icon: <ListOrdered size={15} /> },
   { to: '/authority/alerts', label: 'nav.alerts', icon: <Siren size={15} /> },
+  { to: '/authority/people', label: 'nav.people', icon: <Users size={15} /> },
   /* Administrator-only screen: hidden from regular authority (field officer) users. */
   { to: '/authority/lab', label: 'nav.lab', icon: <FlaskConical size={15} />, roles: ['administrator'] },
 ]
@@ -242,6 +244,7 @@ const SECTION_TITLES: Record<string, string> = {
   '/authority/map': 'Command & Map',
   '/authority/queue': 'Priority Queue',
   '/authority/alerts': 'Alerts Console',
+  '/authority/people': 'People & SOS',
   '/authority/lab': 'Simulation Lab',
   '/citizen': 'Village Defense',
   '/citizen/evacuate': 'Evacuate',

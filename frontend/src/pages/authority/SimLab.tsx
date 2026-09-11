@@ -13,10 +13,15 @@ import {
   AlertTriangle,
   BrainCircuit,
   FlaskConical,
+  Gauge,
+  Pause,
+  Play,
   PlayCircle,
   Plug,
+  Rewind,
   RotateCcw,
   SkipForward,
+  TimerReset,
   Wifi,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -59,13 +64,29 @@ export default function SimLab() {
   const step = useMutation((n: number) => api.step(n, true))
   const refresh = useMutation(() => api.refresh())
   const reset = useMutation(() => api.resetDemo())
+  const start = useMutation(() => api.simulationStart())
+  const pause = useMutation(() => api.simulationPause())
+  const speed = useMutation((v: number) => api.simulationSpeed(v))
+  const jumpTick = useMutation((t: number) => api.simulationJump(t, true))
   const setConn = useMutation((mode: Connectivity) => api.setConnectivity(mode))
   const setFail = useMutation((component: string, enabled: boolean) => api.setFailure(component, enabled))
   const setModel = useMutation((key: string) => api.setModel(key))
 
   const clock = state.data
   const busy =
-    run.pending || step.pending || refresh.pending || reset.pending || setConn.pending || setFail.pending
+    run.pending || step.pending || refresh.pending || reset.pending || start.pending || pause.pending ||
+    speed.pending || jumpTick.pending || setConn.pending || setFail.pending
+  const [speedVal, setSpeedVal] = useState(1)
+  const [jumpVal, setJumpVal] = useState('0')
+
+  useEffect(() => {
+    if (clock?.speed != null) setSpeedVal(clock.speed)
+  }, [clock?.speed])
+
+  const commitJump = (raw: string) => {
+    const n = Math.max(0, Math.min(clock?.total_ticks ?? 240, Number.parseInt(raw || '0', 10) || 0))
+    jumpTick.run(n).then(() => state.reload())
+  }
 
   return (
     <div className="space-y-3 p-3 lg:p-4">
@@ -121,6 +142,76 @@ export default function SimLab() {
               />
             </div>
 
+            {/* play/pause + speed + jump (Sections 78–79) */}
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-ink-700/60 bg-ink-850/40 px-2.5 py-2">
+              <Button
+                size="sm"
+                variant={clock.running ? 'primary' : 'ghost'}
+                icon={clock.running ? <Pause size={12} /> : <Play size={12} />}
+                pending={start.pending || pause.pending}
+                disabled={busy}
+                onClick={() =>
+                  clock.running ? pause.run().then(() => state.reload()) : start.run().then(() => state.reload())
+                }
+              >
+                {clock.running ? 'Pause clock' : 'Play clock'}
+              </Button>
+
+              <label className="flex min-w-[12rem] flex-1 items-center gap-2">
+                <Gauge size={12} className="shrink-0 text-ink-400" />
+                <span className="shrink-0 text-[10px] tracking-wide text-ink-500 uppercase">Speed</span>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={10}
+                  step={0.5}
+                  value={speedVal}
+                  onChange={(e) => setSpeedVal(Number(e.target.value))}
+                  onPointerUp={() => speed.run(speedVal).then(() => state.reload())}
+                  onKeyUp={() => speed.run(speedVal).then(() => state.reload())}
+                  className="w-full accent-[var(--color-accent)]"
+                />
+                <span className="w-14 shrink-0 text-right font-mono text-[11px] text-ink-200">
+                  ×{speedVal.toFixed(1)}
+                </span>
+              </label>
+
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={0}
+                  max={clock.total_ticks}
+                  value={jumpVal}
+                  onChange={(e) => setJumpVal(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitJump(jumpVal)
+                  }}
+                  className="w-20 rounded-md border border-ink-600 bg-ink-850 px-2 py-1 font-mono text-xs text-ink-100"
+                  aria-label="Jump to tick"
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={<TimerReset size={12} />}
+                  pending={jumpTick.pending}
+                  disabled={busy}
+                  onClick={() => commitJump(jumpVal)}
+                >
+                  Jump
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={<Rewind size={12} />}
+                  disabled={busy || clock.tick === 0}
+                  onClick={() => jumpTick.run(0).then(() => state.reload())}
+                  title="Rewind to tick 0 without changing the scenario"
+                >
+                  t0
+                </Button>
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-1.5">
               <Button
                 size="sm"
@@ -160,7 +251,10 @@ export default function SimLab() {
               {clock.at_end && <Chip tone="warn">scenario finished — reset or pick another</Chip>}
             </div>
 
-            <ErrorBlock error={step.error ?? refresh.error ?? reset.error ?? run.error} compact />
+            <ErrorBlock
+              error={step.error ?? refresh.error ?? reset.error ?? run.error ?? speed.error ?? jumpTick.error}
+              compact
+            />
           </div>
         )}
       </Panel>

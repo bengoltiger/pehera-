@@ -1,13 +1,12 @@
 /**
  * Predict — "Real-Time Telemetry Feed" (Atmospheric Ingest & Runoff Model).
  *
- * The atmosphere card shows a REAL map (OSM tiles / local vector fallback)
- * with live wind particles advected through the Open-Meteo u/v field — a
- * god's-eye view of the actual sky over the top-priority zone. The ribbon,
- * rainfall vector and lead-time values mix LIVE external measurements
- * (Open-Meteo) with the engine's runoff model; every simulated value is
- * labelled as such. If the live provider is unreachable the card honestly
- * falls back to the simulated radar and says so.
+ * The atmosphere card is deliberately map-free (maps live on the Map screen):
+ * the left half is the simulated threat radar, the right half is the LIVE
+ * Open-Meteo atmospheric ingest for the top-priority zone — temperature,
+ * wind, humidity, cloud and the next-12-hour precipitation forecast, all
+ * labelled LIVE. If the provider is unreachable the panel says so and the
+ * engine's simulated values stay visible in the ribbon.
  *
  * The timeline, confidence and vector metrics are the engine's real values
  * for the current top-priority zone. The scrubber only interpolates between
@@ -30,15 +29,26 @@ import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
 import { Page, Rise, Stagger } from '../../components/anim'
 import { RadarCanvas } from '../../components/RadarCanvas'
-import { RiskMap, useTileAvailability } from '../../components/RiskMap'
-import { WindParticles } from '../../components/WindParticles'
 import { Chip, MetricCard, Panel, SegmentedGauge, StatusPip, Unavailable } from '../../components/ui'
 import { api } from '../../lib/api'
 import { LEVEL_VAR, fmtNumber, relativeTime, titleCase } from '../../lib/format'
 import { useApi } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
-import { useEngineConfig } from '../../lib/providers'
 import type { Alert, TimelineEntry } from '../../lib/types'
+
+/** One live measurement tile in the atmosphere panel. */
+function LiveMetric({ label, value, unit, sub }: { label: string; value: string; unit?: string; sub?: string }) {
+  return (
+    <div className="flex flex-col gap-0.5 rounded-md border border-ink-700 bg-ink-950 p-2">
+      <span className="hud-label text-ink-500">{label}</span>
+      <span className="font-head text-base font-bold text-ink-50">
+        {value}
+        {unit && <span className="ml-0.5 font-mono text-[10px] font-normal text-ink-400">{unit}</span>}
+      </span>
+      {sub && <span className="font-mono text-[9px] text-ink-400">{sub}</span>}
+    </div>
+  )
+}
 
 const COMPASS_16 = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
 /** Meteorological direction (wind blows FROM `deg`). */
@@ -116,17 +126,12 @@ function EscalationStage({ alerts }: { alerts: Alert[] }) {
 
 export default function Telemetry() {
   const { t } = useI18n()
-  const { config } = useEngineConfig()
-  const tileUrl = config?.map?.tile_url ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
-  const attribution = config?.map?.attribution ?? '© OpenStreetMap contributors'
-  const tileStatus = useTileAvailability(tileUrl)
 
   const overview = useApi(() => api.overview())
   const threats = useApi(() => api.threats())
   const alerts = useApi(() => api.alerts({ limit: 10 }))
   const models = useApi(() => api.models())
   const sim = useApi(() => api.simState())
-  const mapLayers = useApi(() => api.mapLayers(), { liveUpdate: false })
 
   const top = overview.data?.priority_queue?.[0]
   const risk = useApi((s) => api.risk(top!.location_id, { detail: true, lang: 'en' }, s), {
@@ -135,9 +140,10 @@ export default function Telemetry() {
   })
 
   // LIVE external atmosphere over the top zone. Server-side Open-Meteo proxy
-  // (10-min cache) → one small request even for a 144-point wind grid.
+  // (10-min cache). Point data only (grid=0) — the map-based wind field was
+  // retired with the screen's map; the endpoint keeps grid support.
   const live = useApi(
-    (s) => api.liveWeather(risk.data!.location.latitude, risk.data!.location.longitude, 1),
+    (_s) => api.liveWeather(risk.data!.location.latitude, risk.data!.location.longitude, 0),
     {
       enabled: !!risk.data?.location && risk.data.location.latitude != null,
       liveUpdate: false,
@@ -200,105 +206,134 @@ export default function Telemetry() {
       {/* ------------------------------------------------- atmosphere card -- */}
       <Rise>
         <div className="relative mb-3 overflow-hidden rounded-lg border border-ink-600 bg-ink-950 shadow-xl">
-          <div className="relative h-[26rem]">
-            {live.data?.field ? (
-              <>
-                {/* the real map: streets, wards, rivers, threat cells, tracks.
-                    WindParticles is a CHILD of RiskMap so it lives inside the
-                    MapContainer and can use the Leaflet context. */}
-                <RiskMap
-                  layers={mapLayers.data}
-                  field={null}
-                  queue={overview.data?.priority_queue ?? []}
-                  toggles={{ heat: false, zones: true, threats: true, tracks: true, infrastructure: false, rivers: true, alerts: true, labels: true }}
-                  tileStatus={tileStatus}
-                  tileUrl={tileUrl}
-                  attribution={attribution}
-                  selectedLocationId={top?.location_id ?? null}
-                >
-                  {/* live god's-eye wind field advected over the basemap */}
-                  <WindParticles field={live.data.field} />
-                </RiskMap>
-              </>
-            ) : live.error ? (
-              <div className="grid h-full place-items-center bg-ink-950">
-                <div className="w-full">
-                  <RadarCanvas cells={cells} />
-                </div>
-              </div>
-            ) : (
-              <div className="grid h-full place-items-center">
-                <span className="font-mono text-xs text-ink-400">CONNECTING TO LIVE ATMOSPHERIC FEED…</span>
-              </div>
-            )}
-
-            {/* top status badges (pl-12 keeps the map's zoom control clear) */}
-            <div className="absolute top-2 right-2 left-2 z-[500] flex items-center justify-between pointer-events-none pl-12">
-              {live.data ? (
-                <span className="flex items-center gap-1.5 rounded bg-ink-950/85 px-2 py-1 backdrop-blur-md">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-safe" aria-hidden />
-                  <span className="font-mono text-[11px] text-safe">
-                    LIVE: OPEN-METEO · {livePoint?.time ? livePoint.time.slice(11, 16) : '--:--'} LOCAL
-                  </span>
-                </span>
-              ) : (
+          <div className="grid md:grid-cols-[1fr_21rem]">
+            {/* left: threat radar — engine cells, explicitly SIMULATED */}
+            <div className="relative">
+              <RadarCanvas cells={cells} />
+              <div className="pointer-events-none absolute top-2 left-2 flex flex-col items-start gap-1">
                 <span className="flex items-center gap-1.5 rounded bg-ink-950/85 px-2 py-1 backdrop-blur-md">
                   <RadarIcon size={13} className="text-accent-bright" aria-hidden />
-                  <span className="font-mono text-[11px] text-ink-100">
-                    {live.error ? 'LIVE FEED UNREACHABLE — SIMULATED RADAR' : 'ACQUIRING LIVE FEED…'}
+                  <span className="font-mono text-[11px] text-ink-100">THREAT RADAR · SIMULATED</span>
+                </span>
+                <span className="flex items-center gap-1.5 rounded bg-critical/25 px-2 py-1 backdrop-blur-md">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-critical" />
+                  <span className="hud-label text-ink-100">
+                    ZONE: {top ? titleCase(top.location_name).toUpperCase() : '—'}
                   </span>
                 </span>
-              )}
-              <span className="flex items-center gap-1.5 rounded bg-critical/25 px-2 py-1 backdrop-blur-md">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-critical" />
-                <span className="hud-label text-ink-100">
-                  ZONE: {top ? titleCase(top.location_name).toUpperCase() : '—'}
-                </span>
-              </span>
-            </div>
-
-            {/* wind legend (live only) */}
-            {live.data?.field && (
-              <div className="absolute bottom-2 left-2 z-[500] rounded-md bg-ink-950/85 px-2 py-1.5 backdrop-blur-md pointer-events-none">
-                <div className="hud-label mb-1 text-ink-300">
-                  LIVE WIND FIELD · {live.data.field.hour ? `${live.data.field.hour.slice(11, 16)} LOCAL` : '—'}
-                </div>
-                <div
-                  className="h-1.5 w-32 rounded-full"
-                  style={{ background: 'linear-gradient(90deg, #7dd3fc, #5eead4, #facc15, #f87171)' }}
-                  aria-hidden
-                />
-                <div className="mt-0.5 flex justify-between font-mono text-[8px] text-ink-400">
-                  <span>0</span>
-                  <span>12</span>
-                  <span>25</span>
-                  <span>40+ KM/H</span>
-                </div>
               </div>
-            )}
-
-            {/* floating trajectory chip */}
-            {topCell && (
-              <motion.div
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="absolute bottom-2 right-2 z-[500] flex max-w-[80%] items-center gap-2 rounded-md bg-ink-800/95 p-2 shadow-md backdrop-blur-md"
-              >
-                <Zap size={16} className="shrink-0 text-accent-bright" aria-hidden />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="hud-label text-ink-100">{titleCase(topCell.hazard_label ?? topCell.hazard).toUpperCase()} CELL</span>
-                    <span className="font-mono text-[10px] text-accent-bright">
-                      {topCell.movement.speed_kmh != null ? `${topCell.movement.speed_kmh.toFixed(1)} km/h ${topCell.movement.compass}` : 'STATIC'}
+              {topCell && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="absolute right-2 bottom-2 flex max-w-[80%] items-center gap-2 rounded-md bg-ink-800/95 p-2 shadow-md backdrop-blur-md"
+                >
+                  <Zap size={16} className="shrink-0 text-accent-bright" aria-hidden />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="hud-label text-ink-100">{titleCase(topCell.hazard_label ?? topCell.hazard).toUpperCase()} CELL</span>
+                      <span className="font-mono text-[10px] text-accent-bright">
+                        {topCell.movement.speed_kmh != null ? `${topCell.movement.speed_kmh.toFixed(1)} km/h ${topCell.movement.compass}` : 'STATIC'}
+                      </span>
+                    </div>
+                    <span className="block truncate font-mono text-[9px] text-ink-400">
+                      CONF {topCell.confidence.toFixed(0)}% · STATUS {topCell.status.toUpperCase()}
                     </span>
                   </div>
-                  <span className="block truncate font-mono text-[9px] text-ink-400">
-                    CONF {topCell.confidence.toFixed(0)}% · STATUS {topCell.status.toUpperCase()}
-                  </span>
+                </motion.div>
+              )}
+            </div>
+
+            {/* right: LIVE atmospheric ingest (Open-Meteo) for the zone */}
+            <div className="flex flex-col gap-2 border-t border-ink-700/60 bg-ink-900/40 p-3 md:border-t-0 md:border-l">
+              {livePoint ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-safe" aria-hidden />
+                      <span className="font-mono text-[11px] font-bold text-safe">LIVE: OPEN-METEO</span>
+                    </span>
+                    <span className="font-mono text-[10px] text-ink-400">
+                      {livePoint.time ? `${livePoint.time.slice(11, 16)} LOCAL` : ''}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <LiveMetric
+                      label="TEMPERATURE"
+                      value={livePoint.temperature_c != null ? livePoint.temperature_c.toFixed(1) : '—'}
+                      unit="°C"
+                    />
+                    <LiveMetric
+                      label="WIND"
+                      value={livePoint.wind_speed_kmh != null ? livePoint.wind_speed_kmh.toFixed(1) : '—'}
+                      unit="km/h"
+                      sub={livePoint.wind_direction_deg != null ? `FROM ${compassFromDeg(livePoint.wind_direction_deg)}` : undefined}
+                    />
+                    <LiveMetric
+                      label="RAIN NOW"
+                      value={livePoint.precipitation_mm != null ? livePoint.precipitation_mm.toFixed(1) : '—'}
+                      unit="mm"
+                    />
+                    <LiveMetric
+                      label="RAIN NEXT 3H"
+                      value={livePoint.next_3h_rain_mm != null ? livePoint.next_3h_rain_mm.toFixed(1) : '—'}
+                      unit="mm"
+                    />
+                    <LiveMetric
+                      label="HUMIDITY"
+                      value={livePoint.humidity_pct != null ? livePoint.humidity_pct.toFixed(0) : '—'}
+                      unit="%"
+                    />
+                    <LiveMetric
+                      label="CLOUD COVER"
+                      value={livePoint.cloud_cover_pct != null ? livePoint.cloud_cover_pct.toFixed(0) : '—'}
+                      unit="%"
+                    />
+                  </div>
+                  {livePoint.next_12h.length > 0 && (
+                    <div>
+                      <div className="hud-label mb-1 text-ink-400">PRECIPITATION · NEXT 12 HOURS</div>
+                      <div className="flex h-10 items-end gap-0.5">
+                        {livePoint.next_12h.map((h) => {
+                          const maxP = Math.max(10, ...livePoint.next_12h.map((x) => x.precip_mm ?? 0))
+                          const p = h.precip_mm ?? 0
+                          return (
+                            <div
+                              key={h.time}
+                              title={`${h.time.slice(11, 16)} · ${p.toFixed(1)} mm`}
+                              className="flex-1 rounded-sm bg-[#4d9ff0]"
+                              style={{ height: `${Math.max(6, (p / maxP) * 100)}%`, opacity: p > 0 ? 0.95 : 0.25 }}
+                              aria-hidden
+                            />
+                          )
+                        })}
+                      </div>
+                      <div className="mt-0.5 flex justify-between font-mono text-[8px] text-ink-500">
+                        <span>{livePoint.next_12h[0].time.slice(11, 16)}</span>
+                        <span>{livePoint.next_12h[livePoint.next_12h.length - 1].time.slice(11, 16)}</span>
+                      </div>
+                    </div>
+                  )}
+                  <p className="mt-auto font-mono text-[8px] leading-snug text-ink-500 uppercase">
+                    Live measurements over {top ? titleCase(top.location_name) : 'the zone'} · open-meteo.com ·
+                    10-min server cache
+                  </p>
+                </>
+              ) : live.error ? (
+                <div className="flex flex-1 flex-col gap-2">
+                  <span className="font-mono text-[11px] font-bold text-moderate">LIVE FEED UNREACHABLE</span>
+                  <p className="text-[11px] leading-snug text-ink-400">
+                    The external weather provider cannot be reached from this machine right now. The radar at left
+                    stays the simulated engine view, and the ribbon below keeps showing the engine's values.
+                  </p>
                 </div>
-              </motion.div>
-            )}
+              ) : (
+                <div className="grid flex-1 place-items-center">
+                  <span className="font-mono text-xs text-ink-400">CONNECTING TO LIVE ATMOSPHERIC FEED…</span>
+                </div>
+              )}
+            </div>
           </div>
           {/* telemetry sub-ribbon: live measurements + engine runoff values */}
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-ink-700/60 bg-ink-850 px-2.5 py-1.5 font-mono text-[10px] text-ink-400">

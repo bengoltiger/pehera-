@@ -96,9 +96,9 @@ Interactive API docs: `http://localhost:8000/docs`.
 
 | Username | Password | Role |
 |---|---|---|
-| `citizen` | `citizen123` | Citizen (home: Sinhagad Road, English) |
-| `nagrik` | `citizen123` | Citizen (home: Katraj, Hindi) |
-| `authority` | `authority123` | District officer — command centre, alert approval |
+| `citizen` | `citizen123` | Citizen (home: Colaba, English) |
+| `nagrik` | `citizen123` | Citizen (home: Kurla–Mithi, Hindi) |
+| `authority` | `authority123` | BMC disaster management cell — command centre, alert approval |
 | `admin` | `admin12345` | Administrator — audit log, system status |
 
 Seeded credentials exist only because this is a prototype; they are listed by
@@ -146,8 +146,8 @@ Horizons: NOW, +30 m, +1 h, +2 h, +3 h, +6 h.
 a 900 s cooldown and 3600 s deduplication, so the system cannot flap or spam.
 
 **Priority** = risk × exposure × urgency × confidence, and the queue explains its own
-ordering — at one point in the river-flood scenario Hadapsar (risk 68, 187 k people)
-outranks Sinhagad Road (risk 82, 142 k) and the UI says exactly why.
+ordering — at one point in the storm-surge scenario Kurla (risk 68, 390 k people)
+outranks Colaba (risk 82, 230 k) and the UI says exactly why.
 
 ---
 
@@ -201,20 +201,21 @@ Tailwind v4 · Leaflet · Recharts.
 | `statistical.pkl` | Ridge regression, 37 features | 0.903 | 3.33 |
 | `nowcaster.pkl` | Gradient boosting | 0.812 | 3.80 |
 
-Trained on **simulated** scenario data via `python scripts/train_models.py`
-(hold-out wards: Hadapsar, Junnar, Mulshi). These numbers describe agreement with the
-reference engine on simulated events — they are **not** real-world forecast accuracy.
+Trained on **simulated** scenario data via `python scripts/train_models.py`.
+These numbers describe agreement with the reference engine on simulated events — they are
+**not** real-world forecast accuracy.
 
 ### Verification (`POST /api/verify`)
 
 | Scenario / ward | Result |
 |---|---|
-| river_flood / Sinhagad | F1 0.931, MAE 3.13 |
-| urban_flood / Katraj | precision 0.804, recall 1.000, MAE 6.25 |
-| heatwave / Daund | F1 0.952 |
-| normal_day | MAE 0.35 |
+| mumbai_storm_surge / Colaba | simulated |
+| mumbai_mithi / Kurla | simulated |
+| mumbai_heatwave / Borivali | simulated |
+| mumbai_normal | simulated |
 
-MAE grows with lead time exactly as it should: 0.52 at 30 min → 7.68 at 180 min.
+MAE grows with lead time exactly as it should. All metrics describe agreement on
+deterministic simulated data, not real-world forecasts.
 
 ---
 
@@ -222,12 +223,14 @@ MAE grows with lead time exactly as it should: 0.52 at 30 min → 7.68 at 180 mi
 
 | Scenario | Behaviour |
 |---|---|
-| `normal_day` | Flat ~25 (LOW) — proves the system does not cry wolf |
-| `river_flood` | 33 → **84 CRITICAL at t16** → 46, includes a deliberate 45-minute gauge outage |
-| `urban_flood` | 32 → 93 CRITICAL at t8 → 25 |
-| `extreme_weather` | 36 → 96 CRITICAL at t6–t10 |
-| `heatwave` | 50 → 80 CRITICAL at t12 |
-| `heavy_rain` | 23 → 74 HIGH at t12 |
+| `mumbai_normal` | Flat ≤37 (LOW) — proves the system does not cry wolf |
+| `mumbai_heavy_rain` | 29 → **76 HIGH at t7** → 24, sustained monsoon downpour |
+| `mumbai_cloudburst` | 38 → **97 CRITICAL at t5** → 41, localised Dharavi–Kurla cloudburst |
+| `mumbai_high_tide` | 38 → **92 CRITICAL at t8** → 43, rain + high tide compound |
+| `mumbai_storm_surge` | 33 → **72 HIGH at t7** → 28, cyclonic surge at Colaba |
+| `mumbai_mithi` | 40 → **93 CRITICAL at t11** → 43, Mithi river overflow at Kurla |
+| `mumbai_compound` | 44 → **96 CRITICAL at t6** → 54, simultaneous rain + surge + Mithi |
+| `mumbai_heatwave` | 45 → **80 CRITICAL at t11** → 50, heat dome pushes the suburbs to extreme heat |
 
 24 ticks × 15 simulated minutes. The simulation lab can step the clock, jump to the
 peak, cut connectivity, force any provider to fail, and swap the active model — so the

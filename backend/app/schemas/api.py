@@ -56,12 +56,12 @@ class AlertCreate(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "location_id": "loc_sinhagad_road",
+                "location_id": "loc_kurla",
                 "hazard": "flood",
                 "level": "WARNING",
-                "message": "Water levels are rising near the Mutha bank.",
+                "message": "Water levels are rising along the Mithi river bank.",
                 "recommended_actions": ["Move away from low-lying roads"],
-                "geofence": {"kind": "radius", "lat": 18.4575, "lng": 73.8237, "radius_km": 6},
+                "geofence": {"kind": "radius", "lat": 19.0697, "lng": 72.8834, "radius_km": 6},
                 "target_audience": ["citizen", "authority"],
                 "expires_in_hours": 6,
             }
@@ -153,7 +153,7 @@ class ScenarioRunRequest(BaseModel):
 
 class WhatIfRequest(BaseModel):
     model_config = ConfigDict(
-        json_schema_extra={"example": {"location_id": "loc_sinhagad_road",
+        json_schema_extra={"example": {"location_id": "loc_kurla",
                                        "rainfall": 1.3, "river_level": 1.2}}
     )
     location_id: str
@@ -175,6 +175,18 @@ class ResetRequest(BaseModel):
 class VerifyRequest(BaseModel):
     scenario_id: str
     location_id: Optional[str] = None
+
+
+class SpeedRequest(BaseModel):
+    """Simulation-lab clock speed multiplier."""
+    speed: float = Field(default=1.0, ge=0.5, le=10.0)
+
+
+class JumpRequest(BaseModel):
+    """Simulation-lab clock jump (Section 79)."""
+    model_config = ConfigDict(json_schema_extra={"example": {"tick": 12}})
+    tick: int = Field(ge=0, le=240)
+    run_alerts: bool = True
 
 
 class ErrorResponse(BaseModel):

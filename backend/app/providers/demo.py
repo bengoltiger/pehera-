@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, List
 
+from app.engine.dem import flood_susceptibility
 from app.providers.base import (
     DataProvider,
     ForecastProvider,
@@ -242,9 +243,10 @@ class DemoSoilProvider(_DemoBase):
 
 class DemoTerrainProvider(_DemoBase):
     key = "terrain"
-    display_name = "PEHRA Demo Terrain & Exposure Dataset"
+    display_name = "PEHRA Demo DEM & Exposure Dataset"
     source_kind = "terrain"
-    features = ["terrain_vulnerability", "drainage_deficiency", "population_density", "elevation_m"]
+    features = ["terrain_vulnerability", "drainage_deficiency", "population_density",
+                "elevation_m", "slope_deg", "coastal_exposure", "flood_susceptibility"]
     latency_seconds = 0  # static dataset
 
     def fetch(self, location: Any, ctx: ProviderContext) -> List[ObservationRecord]:
@@ -253,11 +255,52 @@ class DemoTerrainProvider(_DemoBase):
         if ctx.forced_failures.get(self.key):
             raise ProviderError("Terrain dataset unavailable (forced failure in demo controls)")
         density = location.population / max(location.area_km2, 0.01)
+        slope = getattr(location, "slope_deg", 0.0)
+        coastal = getattr(location, "coastal_exposure", 0.0)
+        sus = flood_susceptibility(location.elevation_m, slope, location.drainage_deficiency)
         return [
             self._record(location, ctx, "terrain_vulnerability", location.terrain_vulnerability, "index"),
             self._record(location, ctx, "drainage_deficiency", location.drainage_deficiency, "index"),
             self._record(location, ctx, "population_density", density, "people/km²"),
             self._record(location, ctx, "elevation_m", location.elevation_m, "m"),
+            self._record(location, ctx, "slope_deg", slope, "°"),
+            self._record(location, ctx, "coastal_exposure", coastal, "index"),
+            self._record(location, ctx, "flood_susceptibility", sus, "index"),
+        ]
+
+
+class DemoTideProvider(_DemoBase):
+    """Mumbai tide gauge + storm-surge estimate (Section MB-4).
+
+    Reads `tide_level_m`, `surge_m` and the derived `tide_rise_rate` straight
+    from the deterministic scenario forcing. High tide alone is normal; it is
+    the combination with surge and blocked drainage that creates coastal
+    flooding, which the coastal_flood hazard now reasons about.
+    """
+
+    key = "tide"
+    display_name = "PEHRA Demo Tide & Surge Gauge"
+    source_kind = "coastal"
+    features = ["tide_level_m", "surge_m", "tide_rise_rate"]
+    latency_seconds = 300
+
+    def fetch(self, location: Any, ctx: ProviderContext) -> List[ObservationRecord]:
+        f = self._field(location, ctx)
+        f = _apply_overrides(f, ctx.overrides, ["tide_level_m", "surge_m"])
+        scenario = get_scenario(ctx.scenario_id)
+        prev = scenario_field_at(scenario, max(0, ctx.tick - 1), location.latitude, location.longitude)
+        prev = _apply_overrides(prev, ctx.overrides, ["tide_level_m", "surge_m"])
+        cur, prv = f.get("tide_level_m"), prev.get("tide_level_m")
+        if cur is None or prv is None:
+            rise = None
+        else:
+            per_hour = 60.0 / max(scenario.tick_minutes, 1)
+            rise = (cur - prv) * per_hour
+        u = f.get("_unavailable", {}) or {}
+        return [
+            self._record(location, ctx, "tide_level_m", cur, "m above MSL", u.get("tide_level_m")),
+            self._record(location, ctx, "surge_m", f.get("surge_m"), "m", u.get("surge_m")),
+            self._record(location, ctx, "tide_rise_rate", rise, "m/h", u.get("tide_level_m")),
         ]
 
 

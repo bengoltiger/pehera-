@@ -1,16 +1,15 @@
 /**
- * SITREP — the "Command & Map" screen from the tactical design.
- * Everything plotted is live engine data: the map is the real hyperlocal
- * layer, the vectors are the current priority queue and metrics, and the
- * incident feed is the actual alert lifecycle.
+ * SITREP — the "Command" screen. Everything shown is live engine data: the
+ * situation strip is the current priority queue, stage and shelter metrics,
+ * the vectors are current metrics, and the incident feed is the real alert
+ * lifecycle. (No map here by design — the full hyperlocal map lives on the
+ * Map screen, so this page stays light on tile/data usage.)
  */
 import {
   Activity,
   BedDouble,
   Building2,
   ChevronRight,
-  Compass,
-  Crosshair,
   Radio,
   Route,
   Siren,
@@ -21,11 +20,10 @@ import {
 import { motion } from 'framer-motion'
 import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { HeroMapWithSelection } from '../../components/HeroMap'
 import { Page, Rise, Stagger } from '../../components/anim'
 import { MetricCard, Panel, SeverityBadge, StatusPip } from '../../components/ui'
 import { api } from '../../lib/api'
-import { fmtNumber, relativeTime, titleCase } from '../../lib/format'
+import { clsx, fmtNumber, relativeTime, titleCase } from '../../lib/format'
 import { useApi } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
 import type { Alert, AlertLevel } from '../../lib/types'
@@ -109,81 +107,89 @@ export default function Sitrep() {
         </div>
       </div>
 
-      {/* ------------------------------------------------------ hero map -- */}
-      <HeroMapWithSelection className="mb-3 h-[26rem] rounded-md">
-        {/* top-left status HUD */}
-        <div className="pointer-events-none absolute top-3 left-3 z-[500] flex flex-col gap-1">
-          <span
-            className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 backdrop-blur-md ${
-              stage.tone === 'danger'
-                ? 'border-critical bg-critical/20 text-critical glow-critical'
-                : stage.tone === 'warn'
-                  ? 'border-moderate bg-moderate/15 text-moderate'
-                  : stage.tone === 'info'
-                    ? 'border-accent bg-accent/10 text-accent-bright'
-                    : 'border-safe bg-safe/10 text-safe'
-            }`}
-          >
-            <span className="relative flex h-2 w-2">
-              <span className={`h-2 w-2 rounded-full ${stage.tone === 'danger' ? 'bg-critical' : stage.tone === 'warn' ? 'bg-moderate' : stage.tone === 'info' ? 'bg-accent' : 'bg-safe'} animate-ping opacity-75`} />
-              <span className={`absolute h-2 w-2 rounded-full ${stage.tone === 'danger' ? 'bg-critical' : stage.tone === 'warn' ? 'bg-moderate' : stage.tone === 'info' ? 'bg-accent' : 'bg-safe'}`} />
+      {/* ------------------------------------------- what-changed ticker --
+          Narrates what moved since the previous engine sweep (threat cells,
+          queue shifts, alert decisions). Empty/quiet frames say so honestly. */}
+      {(overview.data?.changes?.length ?? 0) > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-md border border-ink-600/70 bg-ink-850/80 px-2.5 py-1.5">
+          <span className="hud-label text-ink-500">WHAT CHANGED</span>
+          {(overview.data?.changes ?? []).map((c, i) => (
+            <span
+              key={`${c.what}-${i}`}
+              className="inline-flex items-center gap-1.5 rounded-full border border-ink-700 bg-ink-900 px-2 py-0.5 text-[10px] text-ink-200"
+            >
+              <span
+                className={clsx(
+                  'h-1.5 w-1.5 rounded-full',
+                  c.severity === 'CRITICAL'
+                    ? 'bg-critical'
+                    : c.severity === 'HIGH'
+                      ? 'bg-moderate'
+                      : c.severity === 'MODERATE'
+                        ? 'bg-accent'
+                        : c.severity === 'WATCH'
+                          ? 'bg-secondary'
+                          : 'bg-safe',
+                )}
+              />
+              {c.message}
             </span>
-            <span className="hud-label">{stage.label}</span>
-          </span>
-          <span className="rounded bg-ink-950/80 px-2 py-0.5 font-mono text-[10px] text-ink-300 backdrop-blur-sm">
-            RADAR: {topCell ? `${topCell.hazard_label ?? topCell.hazard} CELL` : 'NO ACTIVE CELLS'}
-          </span>
+          ))}
         </div>
+      )}
 
-        {/* top-right compass */}
-        <div className="pointer-events-none absolute top-3 right-3 z-[500] flex items-center gap-1.5 rounded border border-ink-600 bg-ink-800/90 px-2 py-0.5 backdrop-blur-md">
-          <Compass size={13} className="text-accent-bright" aria-hidden />
-          <span className="font-mono text-[11px] text-ink-100">
-            {topCell?.movement.bearing_deg !== null && topCell?.movement.bearing_deg !== undefined
-              ? `${topCell.movement.bearing_deg.toFixed(0)}° ${topCell.movement.compass}`
-              : '— °'}
-          </span>
-        </div>
-
-        {/* floating spatial chips */}
-        <div className="pointer-events-none absolute inset-x-3 bottom-8 z-[500] flex flex-wrap gap-1">
-          {topCell && (
-            <span className="pointer-events-auto inline-flex items-center gap-1 rounded bg-ink-800/90 px-1.5 py-0.5 backdrop-blur-md">
+      {/* ------------------------------------------- situation strip --
+          (the map was removed from this screen on purpose: maps live on the
+          Map screen. This strip keeps the at-a-glance facts without any
+          tile downloads.) */}
+      <Rise>
+        <div className="mb-3 grid grid-cols-2 gap-2 rounded-md border border-ink-600 bg-ink-850 p-2 xl:grid-cols-4">
+          <div className="flex flex-col gap-0.5 rounded bg-ink-900 p-2">
+            <span className="hud-label text-ink-500">STAGE</span>
+            <span
+              className={`inline-flex items-center gap-1.5 text-xs font-bold ${
+                stage.tone === 'danger' ? 'text-critical' : stage.tone === 'warn' ? 'text-moderate' : stage.tone === 'info' ? 'text-accent-bright' : 'text-safe'
+              }`}
+            >
+              <span className={`h-2 w-2 animate-ping rounded-full ${stage.tone === 'danger' ? 'bg-critical' : stage.tone === 'warn' ? 'bg-moderate' : stage.tone === 'info' ? 'bg-accent' : 'bg-safe'}`} />
+              {stage.label}
+            </span>
+            <span className="font-mono text-[9px] text-ink-500">
+              SYNC {relativeTime(overview.data?.generated_at)}
+            </span>
+          </div>
+          <div className="flex flex-col gap-0.5 rounded bg-ink-900 p-2">
+            <span className="hud-label text-ink-500">TOP THREAT CELL</span>
+            <span className="flex items-center gap-1.5 text-xs font-bold text-critical">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-critical" />
-              <span className="font-mono text-[10px] text-critical">
-                DANGER RING · {topCell.radius_km.toFixed(1)} km
-              </span>
+              {topCell ? titleCase(topCell.hazard_label ?? topCell.hazard).toUpperCase() : 'NO ACTIVE CELLS'}
             </span>
-          )}
-          {top && (
-            <span className="pointer-events-auto inline-flex items-center gap-1 rounded bg-ink-800/90 px-1.5 py-0.5 backdrop-blur-md">
-              <Route size={11} className="text-accent-bright" aria-hidden />
-              <span className="font-mono text-[10px] text-accent-bright">
-                PRIORITY CORRIDOR: {titleCase(top.location_name)}
-              </span>
+            <span className="font-mono text-[9px] text-ink-500">
+              {topCell ? `${topCell.current_severity.toFixed(0)}/100 · RING ${topCell.radius_km.toFixed(1)} KM` : 'RADAR QUIET'}
             </span>
-          )}
-          {shelters[0] && (
-            <span className="pointer-events-auto inline-flex items-center gap-1 rounded bg-ink-800/90 px-1.5 py-0.5 backdrop-blur-md">
-              <Building2 size={11} className="text-secondary" aria-hidden />
-              <span className="font-mono text-[10px] text-secondary">
-                SHELTER: {shelters.length} SITE{shelters.length === 1 ? '' : 'S'}
-              </span>
+          </div>
+          <div className="flex flex-col gap-0.5 rounded bg-ink-900 p-2">
+            <span className="hud-label text-ink-500">PRIORITY CORRIDOR</span>
+            <span className="flex items-center gap-1.5 text-xs font-bold text-accent-bright">
+              <Route size={12} aria-hidden />
+              {top ? titleCase(top.location_name).toUpperCase() : '—'}
             </span>
-          )}
+            <span className="font-mono text-[9px] text-ink-500">
+              {topZone ? `${topZone.lat.toFixed(4)}N ${topZone.lng.toFixed(4)}E` : 'NO ACTIVE PRIORITIES'}
+            </span>
+          </div>
+          <div className="flex flex-col gap-0.5 rounded bg-ink-900 p-2">
+            <span className="hud-label text-ink-500">SHELTER NETWORK</span>
+            <span className="flex items-center gap-1.5 text-xs font-bold text-secondary">
+              <Building2 size={12} aria-hidden />
+              {shelters.length} SITES
+            </span>
+            <span className="font-mono text-[9px] text-ink-500">
+              {shelters.length > 0 ? `${fmtNumber(bedCapacity)} BEDS SEEDED` : 'NONE SEEDED'} · MAP SCREEN FOR DETAIL
+            </span>
+          </div>
         </div>
-
-        {/* bottom telemetry ribbon */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[500] flex items-center justify-between border-t border-ink-700/60 bg-ink-950/90 px-3 py-1 backdrop-blur-md">
-          <span className="flex items-center gap-1.5 font-mono text-[10px] text-ink-300">
-            <Crosshair size={11} className="text-accent" aria-hidden />
-            {topZone ? `${topZone.lat.toFixed(5)}N ${topZone.lng.toFixed(5)}E` : '— N — E'}
-          </span>
-          <span className="font-mono text-[10px] text-ink-400">
-            SYNC: <span className="text-accent-bright">{relativeTime(overview.data?.generated_at)}</span>
-          </span>
-        </div>
-      </HeroMapWithSelection>
+      </Rise>
 
       {/* ------------------------------------------------- tactical vectors -- */}
       <div className="mb-3 flex items-center justify-between">

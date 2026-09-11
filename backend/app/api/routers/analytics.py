@@ -85,6 +85,7 @@ def overview(db: Session = Depends(get_db)) -> dict:
         "priority_queue": queue,
         "threat_cells": summary["threat_cells"],
         "risk_field_points": summary.get("risk_field", {}).get("count", 0),
+        "changes": summary.get("changes", []),
         "data_mode": {"is_simulated": True, "label": "DEMO / SIMULATED DATA"},
     }
 

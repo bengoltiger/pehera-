@@ -16,6 +16,7 @@ from app.providers.demo import (
     DemoSatelliteProvider,
     DemoSoilProvider,
     DemoTerrainProvider,
+    DemoTideProvider,
     DemoWeatherProvider,
 )
 
@@ -28,6 +29,7 @@ _REGISTRY: Dict[str, Dict[str, Type[DataProvider]]] = {
     "soil": {"demo": DemoSoilProvider},
     "terrain": {"demo": DemoTerrainProvider},
     "historical": {"demo": DemoHistoricalProvider},
+    "tide": {"demo": DemoTideProvider},
 }
 
 _SLOT_SETTING = {
@@ -38,6 +40,7 @@ _SLOT_SETTING = {
     "soil": "weather_provider",
     "terrain": "terrain_provider",
     "historical": "historical_provider",
+    "tide": "tide_provider",
 }
 
 
