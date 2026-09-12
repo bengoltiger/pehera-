@@ -22,6 +22,51 @@
         document.documentElement.dataset.theme = 'dark';
       }
     </script>
+    <script>
+      // Boot diagnostics: a crash (or a silent mount failure) must never leave a
+      // bare blank page. Capture anything that throws and paint it on-screen.
+      (function () {
+        var errors = [];
+        var painted = false;
+        function fmt(e) {
+          return JSON.stringify(
+            e && e.message && e.name
+              ? { name: e.name, message: e.message, stack: (e.stack || '').split('\n').slice(0, 4).join('\n') }
+              : e,
+            null,
+            2,
+          );
+        }
+        window.addEventListener('error', function (ev) {
+          errors.push(ev.error ? fmt(ev.error) : ev.message + ' @ ' + ev.filename + ':' + ev.lineno);
+          paint();
+        });
+        window.addEventListener('unhandledrejection', function (ev) {
+          errors.push(fmt(ev.reason));
+          paint();
+        });
+        function paint() {
+          if (painted) return;
+          painted = true;
+          var el = document.createElement('div');
+          el.style.cssText =
+            'position:fixed;inset:0;z-index:99999;background:#061520;color:#f3c8a8;' +
+            'font:13px/1.6 "JetBrains Mono",monospace;padding:28px;overflow:auto;white-space:pre-wrap;';
+          el.textContent =
+            'PEHRA failed to start.\n\nLocation: ' + location.href + '\n\n' +
+            (errors.join('\n---\n') || 'No error object captured — open DevTools Console (F12) and reload.') +
+            '\n\nCheck: backend reachable? (Settings gear -> API URL). ' +
+            'If deploying the web app separately, set VITE_API_BASE to the backend URL and redeploy.';
+          document.body && document.body.appendChild(el);
+        }
+        // If React never mounts #root, surface what we have.
+        window.addEventListener('DOMContentLoaded', function () {
+          setTimeout(function () {
+            if (!document.getElementById('root') || !document.getElementById('root').childElementCount) paint();
+          }, 5000);
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

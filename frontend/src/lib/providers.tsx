@@ -212,6 +212,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     let source: EventSource | null = null
     let pollTimer: number | undefined
     let retry: number | undefined
+    let silenceGuard: number | undefined
     let closed = false
     let seen = new Set<string>()
 
@@ -248,11 +249,39 @@ export function AppProviders({ children }: { children: ReactNode }) {
         return
       }
       source = new EventSource(apiUrl('/api/events'))
+      let lastMessageAt = 0
+      // If the SSE pipe is "open" but silent (e.g. a host/proxy returns 200 for
+      // /api/events without ever streaming, or sends the SPA's index.html),
+      // EventSource never errors and the UI would go stale forever. Nudge it
+      // back to polling after a quiet spell — the UI always stays live.
+      const guardId = window.setInterval(() => {
+        if (closed) {
+          window.clearInterval(guardId)
+          return
+        }
+        if (
+          transportRef.current === 'sse' &&
+          source &&
+          source.readyState === 1 &&
+          lastMessageAt &&
+          Date.now() - lastMessageAt > 12000
+        ) {
+          window.clearInterval(guardId)
+          setTransport('polling')
+          setConnected(false)
+          source.close()
+          source = null
+          startPolling()
+        }
+      }, 5000)
+      silenceGuard = guardId
       source.onopen = () => {
+        lastMessageAt = Date.now()
         setConnected(true)
         setTransport('sse')
       }
       source.onmessage = (ev) => {
+        lastMessageAt = Date.now()
         try {
           emit(JSON.parse(ev.data))
         } catch {
@@ -303,6 +332,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       source?.close()
       if (pollTimer) window.clearInterval(pollTimer)
       if (retry) window.clearTimeout(retry)
+      if (silenceGuard) window.clearInterval(silenceGuard)
     }
   }, [emit])
 
