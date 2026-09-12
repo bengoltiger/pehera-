@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AppShell, FullPageLoader } from './components/AppShell'
 import { EmptyState, Panel } from './components/ui'
 import { useAuth } from './lib/providers'
+import { isCitizenKiosk } from './lib/platform'
 import CitizenApp from './pages/citizen/CitizenApp'
 import Login from './pages/Login'
 import AlertsPage from './pages/authority/AlertsPage'
@@ -19,6 +20,8 @@ function RequireAuth({ children, roles }: { children: React.ReactNode; roles?: s
   const location = useLocation()
   if (loading) return <FullPageLoader />
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  // The APK ships citizen-only: authority/administrator screens are unreachable.
+  if (isCitizenKiosk() && roles && !roles.includes('citizen')) return <Navigate to="/citizen" replace />
   if (roles && !roles.includes(user.role)) {
     return (
       <AppShell>
@@ -151,7 +154,16 @@ export default function App() {
             loading ? (
               <FullPageLoader />
             ) : (
-              <Navigate to={user ? (user.role === 'citizen' ? '/citizen' : '/authority') : '/login'} replace />
+              <Navigate
+                to={
+                  user
+                    ? isCitizenKiosk() || user.role === 'citizen'
+                      ? '/citizen'
+                      : '/authority'
+                    : '/login'
+                }
+                replace
+              />
             )
           }
         />

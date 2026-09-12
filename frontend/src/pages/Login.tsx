@@ -6,6 +6,7 @@ import { DataHonestyBanner } from '../components/AppShell'
 import { Button, Chip, ErrorBlock, Panel, PeHraLogo } from '../components/ui'
 import { api, getApiBase, setApiBase } from '../lib/api'
 import { useApi } from '../lib/hooks'
+import { isCitizenKiosk } from '../lib/platform'
 import { useAuth } from '../lib/providers'
 import { useTheme } from '../lib/theme'
 
@@ -77,7 +78,100 @@ export default function Login() {
     }
   }
 
-  return (
+  return isCitizenKiosk() ? (
+    <div className="flex h-[100dvh] min-h-0 flex-col bg-ink-950">
+      <DataHonestyBanner />
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="w-full max-w-md"
+        >
+          {/* ------------------------------------ citizen-only (APK) ---- */}
+          <Panel className="border-accent/40">
+            <div className="mb-3 flex items-center gap-3">
+              <PeHraLogo size={36} />
+              <div className="min-w-0">
+                <h1 className="flex items-baseline gap-1.5 font-head text-base font-extrabold tracking-[0.12em] text-ink-50 uppercase">
+                  PEHRA
+                  <span className="font-mono text-[11px] font-semibold tracking-[0.2em] text-accent-bright">
+                    //PEOPLE
+                  </span>
+                </h1>
+                <p className="mt-0.5 font-mono text-[9px] tracking-[0.06em] text-ink-400">
+                  CITIZEN APP · DEMO BUILD · LOGIN IS PERSONA-ONLY
+                </p>
+              </div>
+            </div>
+
+            <p className="mb-3 text-[11px] leading-snug text-ink-400">
+              Tap a persona to sign in as that citizen and connect to your PEHRA server. The server URL is saved on
+              this device — set it once.
+            </p>
+
+            <div className="mb-3 rounded-md border border-ink-700 bg-ink-850 p-2">
+              <div className="mb-1 flex items-center gap-1.5">
+                <Server size={12} className="text-ink-400" aria-hidden />
+                <span className="hud-label font-mono text-[9px] tracking-wider text-ink-400 uppercase">
+                  Backend server
+                </span>
+              </div>
+              <div className="flex gap-1.5">
+                <input
+                  value={serverUrl}
+                  onChange={(e) => setServerUrl(e.target.value)}
+                  placeholder="https://your-backend.onrender.com"
+                  autoComplete="url"
+                  className="min-w-0 flex-1 rounded border border-ink-600 bg-ink-900 px-2 py-1.5 text-sm text-ink-100 outline-none focus:border-accent"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (serverUrl.trim()) setApiBase(serverUrl)
+                  }}
+                >
+                  Save
+                </Button>
+              </div>
+              <p className="mt-1.5 font-mono text-[9px] text-ink-400">
+                {getApiBase()
+                  ? `Current: ${getApiBase()} · saved on this device`
+                  : 'Not set — type your live PEHRA URL above and tap Save (the app reloads).'}
+              </p>
+            </div>
+
+            <ErrorBlock error={error} compact />
+
+            <div className="grid grid-cols-3 gap-2">
+              {QUICK_PERSONAS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={pending}
+                  onClick={() => void connectPersona(p)}
+                  className="flex flex-col items-center gap-1 rounded-md border border-ink-700 bg-ink-850 px-2 py-3 text-center transition-colors hover:border-accent/50 hover:bg-ink-800 disabled:opacity-40"
+                >
+                  <span className="font-head text-sm font-bold text-ink-50">{p.code.replace('PERSON ', 'P')}</span>
+                  <span className="flex items-center gap-0.5 font-mono text-[9px] text-ink-400">
+                    <MapPin size={9} aria-hidden /> {p.ward.replace(' Ward', '')}
+                  </span>
+                  <span className="mt-1 font-mono text-[9px] tracking-wider text-accent-bright uppercase">
+                    {pending ? 'Connecting…' : 'Connect'}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-3 flex items-start gap-1.5 text-[10px] leading-relaxed text-ink-500">
+              <ShieldCheck size={11} className="mt-0.5 shrink-0" aria-hidden />
+              Personas are simulated citizens. This build enables citizen access only — no authority login.
+            </p>
+          </Panel>
+        </motion.div>
+      </div>
+    </div>
+  ) : (
     <div className="flex h-full min-h-0 flex-col bg-ink-950">
       <DataHonestyBanner />
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-4">
