@@ -31,10 +31,15 @@ export default function Login() {
 
   const from = (location.state as { from?: string } | null)?.from
 
-  // One tap = signed in as the demo citizen + this persona, straight to /citizen.
-  const citizenAccount = accounts.data?.accounts.find((a) => a.role === 'citizen')
+  // One tap = signed in as that persona's own citizen account, straight to /citizen.
+  // Each persona maps to a distinct seeded account (persona_1=meera, etc.) so P1/P2/P3
+  // are genuinely different people; fall back to the first citizen for older servers.
+  const citizenAccount = (personaId: string) =>
+    accounts.data?.accounts.find((a) => a.role === 'citizen' && a.persona_id === personaId) ??
+    accounts.data?.accounts.find((a) => a.role === 'citizen')
   const connectPersona = async (persona: (typeof QUICK_PERSONAS)[number]) => {
-    if (!citizenAccount) {
+    const account = citizenAccount(persona.id)
+    if (!account) {
       setError({ message: 'Demo accounts not loaded yet — check the API URL (server icon).' })
       return
     }
@@ -46,7 +51,7 @@ export default function Login() {
       } catch {
         /* ignore */
       }
-      await signIn(citizenAccount.username, citizenAccount.password)
+      await signIn(account.username, account.password)
       navigate('/citizen', { replace: true })
     } catch (err) {
       setError({ message: err instanceof Error ? err.message : 'Could not connect as this persona.' })
@@ -56,8 +61,13 @@ export default function Login() {
   }
 
   // Backend of any shape → friendly empty state instead of `.accounts.map` crash.
-  const demoAccounts: { username: string; password: string; role: string; description: string }[] =
-    accounts.data?.accounts ?? []
+  const demoAccounts: {
+    username: string
+    password: string
+    role: string
+    description: string
+    persona_id?: string
+  }[] = accounts.data?.accounts ?? []
 
   useEffect(() => {
     if (!user) return
@@ -315,7 +325,7 @@ export default function Login() {
                     <button
                       key={p.id}
                       type="button"
-                      disabled={pending || !citizenAccount}
+                      disabled={pending || !demoAccounts.some((a) => a.role === 'citizen')}
                       onClick={() => void connectPersona(p)}
                       className="flex flex-col items-center gap-1 rounded-md border border-ink-700 bg-ink-850 px-2 py-2 text-center transition-colors hover:border-accent/50 hover:bg-ink-800 disabled:opacity-40"
                     >
@@ -326,7 +336,7 @@ export default function Login() {
                     </button>
                   ))}
                 </div>
-                {!citizenAccount && !accounts.loading && (
+                {!demoAccounts.some((a) => a.role === 'citizen') && !accounts.loading && (
                   <p className="mt-2 font-mono text-[9px] text-ink-400">
                     Demo accounts not loaded — check the API URL (server icon), then Retry.
                   </p>

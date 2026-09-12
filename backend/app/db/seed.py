@@ -301,6 +301,15 @@ HISTORICAL_INCIDENTS = [
 # demo users -- passwords come from a constant here ONLY because this is a
 # prototype seed. Real deployments create users through the admin API.
 SEED_USERS = [
+    # One login account per demo persona (Section 89), so each quick-login identity
+    # is a distinct user: Person 1 = Meera (Kurla), Person 2 = Arjun (Colaba),
+    # Person 3 = Farhan (Mahim).
+    dict(username="meera", full_name="Meera Nair", role="citizen",
+         password="citizen123", home_location_id="loc_kurla", language="en"),
+    dict(username="arjun", full_name="Arjun Deshpande", role="citizen",
+         password="citizen123", home_location_id="loc_colaba", language="en"),
+    dict(username="farhan", full_name="Farhan Shaikh", role="citizen",
+         password="citizen123", home_location_id="loc_mahim", language="en"),
     dict(username="citizen", full_name="Demo Citizen", role="citizen",
          password="citizen123", home_location_id="loc_colaba", language="en"),
     dict(username="nagrik", full_name="डेमो नागरिक", role="citizen",

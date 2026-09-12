@@ -130,10 +130,16 @@ def demo_accounts() -> dict:
     return {
         "note": "Seeded prototype accounts only. Real deployments create users through the admin API.",
         "accounts": [
+            {"username": "meera", "password": "citizen123", "role": "citizen", "persona_id": "persona_1",
+             "description": "Meera Nair — Kurla Ward (Person 1)"},
+            {"username": "arjun", "password": "citizen123", "role": "citizen", "persona_id": "persona_2",
+             "description": "Arjun Deshpande — Colaba Ward (Person 2)"},
+            {"username": "farhan", "password": "citizen123", "role": "citizen", "persona_id": "persona_3",
+             "description": "Farhan Shaikh — Mahim Ward (Person 3)"},
             {"username": "citizen", "password": "citizen123", "role": "citizen",
-             "description": "Citizen view for Colaba Ward"},
+             "description": "Legacy Demo Citizen — Colaba Ward"},
             {"username": "nagrik", "password": "citizen123", "role": "citizen",
-             "description": "Hindi-language citizen for Kurla–Mithi River Ward"},
+             "description": "Legacy Hindi-language citizen — Kurla–Mithi River Ward"},
             {"username": "authority", "password": "authority123", "role": "authority",
              "description": "BMC disaster management cell — command centre, alert approval"},
             {"username": "admin", "password": "admin12345", "role": "administrator",

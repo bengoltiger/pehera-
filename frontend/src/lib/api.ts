@@ -223,7 +223,10 @@ export const api = {
     request<User>(`/api/auth/me/location${qs({ location_id: locationId })}`, { method: 'PATCH' }),
   users: () => request<{ count: number; users: Record<string, unknown>[] }>('/api/auth/users'),
   demoAccounts: () =>
-    request<{ note: string; accounts: { username: string; password: string; role: string; description: string }[] }>(
+    request<{
+      note: string
+      accounts: { username: string; password: string; role: string; description: string; persona_id?: string }[]
+    }>(
       '/api/auth/demo-accounts',
     ),
 
