@@ -1,0 +1,27 @@
+# Render blueprint — deploy the FastAPI backend to https://render.com
+# Blueprint:  New +  → "Blueprint"  →  connect repo  →  apply.
+# Alternative (click-through): New + → Web Service → pick repo → root dir `backend`
+#   build:   pip install -r requirements.txt
+#   start:   uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1
+services:
+  - type: web
+    name: pehra-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.2"
+      - key: PEHRA_ENVIRONMENT
+        value: production
+      - key: PEHRA_DEBUG
+        value: "false"
+      # Deterministic simulated data — the app never presents it as real.
+      - key: PEHRA_DEMO_MODE
+        value: "true"
+      - key: PEHRA_JWT_SECRET
+        generateValue: true
+    # CORS defaults to * so the Vercel-frontend origin is allowed.
