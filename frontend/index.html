@@ -55,7 +55,8 @@
           el.textContent =
             'PEHRA failed to start.\n\nLocation: ' + location.href + '\n\n' +
             (errors.join('\n---\n') || 'No error object captured — open DevTools Console (F12) and reload.') +
-            '\n\nCheck: backend reachable? (Settings gear -> API URL). ' +
+            '\n\nCheck: is the PEHRA backend reachable from here? On the login screen open the ' +
+            'server icon (top-right, next to the theme toggle) and set the backend API URL. ' +
             'If deploying the web app separately, set VITE_API_BASE to the backend URL and redeploy.';
           document.body && document.body.appendChild(el);
         }

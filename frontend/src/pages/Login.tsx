@@ -1,10 +1,10 @@
-import { KeyRound, LogIn, Moon, ShieldCheck, Sun, User as UserIcon } from 'lucide-react'
+import { KeyRound, LogIn, Moon, Server, ShieldCheck, Sun, User as UserIcon } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { DataHonestyBanner } from '../components/AppShell'
 import { Button, Chip, ErrorBlock, Panel, PeHraLogo } from '../components/ui'
-import { api } from '../lib/api'
+import { api, getApiBase, setApiBase } from '../lib/api'
 import { useApi } from '../lib/hooks'
 import { useAuth } from '../lib/providers'
 import { useTheme } from '../lib/theme'
@@ -18,6 +18,8 @@ export default function Login() {
   const [password, setPassword] = useState('authority123')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<{ message: string } | null>(null)
+  const [showBackend, setShowBackend] = useState(false)
+  const [serverUrl, setServerUrl] = useState<string>(() => getApiBase())
   const accounts = useApi(() => api.demoAccounts(), { liveUpdate: false })
 
   const from = (location.state as { from?: string } | null)?.from
@@ -63,6 +65,58 @@ export default function Login() {
           >
             {theme === 'dark' ? <Sun size={14} aria-hidden /> : <Moon size={14} aria-hidden />}
           </button>
+
+          {/* backend URL: point the deployed SPA at any PEHRA API, no redeploy needed */}
+          <button
+            type="button"
+            onClick={() => setShowBackend((v) => !v)}
+            aria-label="Backend API URL"
+            title={getApiBase() ? `API: ${getApiBase()}` : 'Backend API not configured'}
+            className="absolute top-8 right-0 z-10 grid h-8 w-8 place-items-center rounded-md border border-ink-600 bg-ink-900 text-ink-300 transition-colors hover:bg-ink-800 hover:text-accent-bright"
+          >
+            <Server size={14} aria-hidden />
+          </button>
+
+          {showBackend && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                setApiBase(serverUrl)
+              }}
+              className="absolute top-[4.5rem] right-0 z-20 w-80 rounded-md border border-ink-600 bg-ink-900 p-3 shadow-xl"
+            >
+              <p className="mb-1 hud-label text-[10px] tracking-wider text-ink-400 uppercase">
+                PEHRA backend API
+              </p>
+              <input
+                value={serverUrl}
+                onChange={(e) => setServerUrl(e.target.value)}
+                placeholder="https://your-backend.onrender.com"
+                autoComplete="url"
+                className="w-full rounded border border-ink-600 bg-ink-850 px-2 py-1.5 text-xs text-ink-100 outline-none focus:border-accent"
+              />
+              <div className="mt-2 flex items-center gap-2">
+                <Button size="sm" type="submit" icon={<Server size={12} />}>
+                  Apply &amp; reload
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setServerUrl('')
+                    setApiBase('')
+                  }}
+                  className="text-[11px] text-ink-500 transition-colors hover:text-ink-300"
+                >
+                  Use same origin
+                </button>
+              </div>
+              <p className="mt-2 text-[10px] leading-relaxed text-ink-500">
+                {getApiBase()
+                  ? `Current: ${getApiBase()}`
+                  : 'Not set — the app is calling its own origin (/api), which is why requests fail here.'}
+              </p>
+            </form>
+          )}
 
           <div className="grid gap-4 md:grid-cols-2">
             {/* ------------------------------------------------ sign-in ---- */}
