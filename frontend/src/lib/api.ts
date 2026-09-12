@@ -164,11 +164,19 @@ async function request<T>(
 
   const text = await response.text()
   let payload: unknown = null
+  // A successful response that is not JSON means the request never reached the
+  // PEHRA API (e.g. a host serves index.html for /api/*). That is an ERROR, not
+  // data — returning it would make every `.map(...)` downstream crash.
   if (text) {
     try {
       payload = JSON.parse(text)
     } catch {
-      payload = { error: 'bad_response', message: text.slice(0, 400) }
+      throw new PehraError(response.status, {
+        error: 'bad_response',
+        message:
+          'The server answered, but not with JSON. Check the API URL in Settings — ' +
+          'the request may be hitting a page instead of the PEHRA backend.',
+      })
     }
   }
 

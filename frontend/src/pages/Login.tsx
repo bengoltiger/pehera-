@@ -22,6 +22,10 @@ export default function Login() {
 
   const from = (location.state as { from?: string } | null)?.from
 
+  // Backend of any shape → friendly empty state instead of `.accounts.map` crash.
+  const demoAccounts: { username: string; password: string; role: string; description: string }[] =
+    accounts.data?.accounts ?? []
+
   useEffect(() => {
     if (!user) return
     navigate(from ?? (user.role === 'citizen' ? '/citizen' : '/authority'), { replace: true })
@@ -124,9 +128,9 @@ export default function Login() {
               subtitle="Seeded prototype users — click to fill the form"
               className="self-start"
             >
-              {accounts.data ? (
+              {accounts.data && demoAccounts.length > 0 ? (
                 <ul className="space-y-2">
-                  {accounts.data.accounts.map((a, i) => (
+                  {demoAccounts.map((a, i) => (
                     <motion.li
                       key={a.username}
                       initial={{ opacity: 0, x: 8 }}
