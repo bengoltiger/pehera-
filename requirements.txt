@@ -1,0 +1,5 @@
+# Root-level shim so Render/the user can deploy withOUT setting a "Root directory":
+# the real pinned deps live in backend/requirements.txt.
+#
+#   pip install -r requirements.txt   <- works from the repo root too.
+-r backend/requirements.txt

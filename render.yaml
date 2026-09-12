@@ -1,20 +1,19 @@
 # Render blueprint — deploy the FastAPI backend to https://render.com
 # Blueprint:  New +  → "Blueprint"  →  connect repo  →  apply.
-# Alternative (click-through): New + → Web Service → pick repo → root dir `backend`
+# Manual works too with the standard fields:
 #   build:   pip install -r requirements.txt
-#   start:   uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1
+#   start:   cd backend && uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1
+# No "Root directory" setting is required: the root-level requirements.txt
+# delegates to backend/requirements.txt and the start command cd's into backend.
 services:
   - type: web
     name: pehra-backend
     runtime: python
-    rootDir: backend
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1
     healthCheckPath: /api/health
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.13.2"
       - key: PEHRA_ENVIRONMENT
         value: production
       - key: PEHRA_DEBUG
