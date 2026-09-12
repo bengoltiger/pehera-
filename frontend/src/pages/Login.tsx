@@ -1,4 +1,4 @@
-import { KeyRound, LogIn, Moon, Server, ShieldCheck, Sun, User as UserIcon } from 'lucide-react'
+import { KeyRound, LogIn, MapPin, Moon, Server, ShieldCheck, Sun, User as UserIcon, Users } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -8,6 +8,12 @@ import { api, getApiBase, setApiBase } from '../lib/api'
 import { useApi } from '../lib/hooks'
 import { useAuth } from '../lib/providers'
 import { useTheme } from '../lib/theme'
+
+const QUICK_PERSONAS = [
+  { id: 'persona_1', code: 'PERSON 1', ward: 'Kurla Ward' },
+  { id: 'persona_2', code: 'PERSON 2', ward: 'Colaba Ward' },
+  { id: 'persona_3', code: 'PERSON 3', ward: 'Mahim Ward' },
+]
 
 export default function Login() {
   const { signIn, user } = useAuth()
@@ -23,6 +29,30 @@ export default function Login() {
   const accounts = useApi(() => api.demoAccounts(), { liveUpdate: false })
 
   const from = (location.state as { from?: string } | null)?.from
+
+  // One tap = signed in as the demo citizen + this persona, straight to /citizen.
+  const citizenAccount = accounts.data?.accounts.find((a) => a.role === 'citizen')
+  const connectPersona = async (persona: (typeof QUICK_PERSONAS)[number]) => {
+    if (!citizenAccount) {
+      setError({ message: 'Demo accounts not loaded yet — check the API URL (server icon).' })
+      return
+    }
+    setPending(true)
+    setError(null)
+    try {
+      try {
+        localStorage.setItem('pehra.active_persona', persona.id)
+      } catch {
+        /* ignore */
+      }
+      await signIn(citizenAccount.username, citizenAccount.password)
+      navigate('/citizen', { replace: true })
+    } catch (err) {
+      setError({ message: err instanceof Error ? err.message : 'Could not connect as this persona.' })
+    } finally {
+      setPending(false)
+    }
+  }
 
   // Backend of any shape → friendly empty state instead of `.accounts.map` crash.
   const demoAccounts: { username: string; password: string; role: string; description: string }[] =
@@ -176,12 +206,45 @@ export default function Login() {
               </p>
             </Panel>
 
-            {/* ------------------------------------------- demo accounts ---- */}
-            <Panel
-              title="Demo accounts"
-              subtitle="Seeded prototype users — click to fill the form"
-              className="self-start"
-            >
+            {/* ------------------------------------------- instant personas ---- */}
+            <div className="flex flex-col gap-4 self-start">
+              <Panel className="self-start border-accent/40">
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <Users size={14} className="text-accent-bright" aria-hidden />
+                  <h2 className="hud-label tracking-wider text-ink-300 uppercase">Instant persona login</h2>
+                </div>
+                <p className="mb-2 text-[11px] leading-snug text-ink-400">
+                  One tap signs you in as the demo citizen with that persona's identity — straight to the live server.
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {QUICK_PERSONAS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      disabled={pending || !citizenAccount}
+                      onClick={() => void connectPersona(p)}
+                      className="flex flex-col items-center gap-1 rounded-md border border-ink-700 bg-ink-850 px-2 py-2 text-center transition-colors hover:border-accent/50 hover:bg-ink-800 disabled:opacity-40"
+                    >
+                      <span className="font-head text-xs font-bold text-ink-50">{p.code.replace('PERSON ', 'P')}</span>
+                      <span className="flex items-center gap-0.5 font-mono text-[9px] text-ink-400">
+                        <MapPin size={9} aria-hidden /> {p.ward.replace(' Ward', '')}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {!citizenAccount && !accounts.loading && (
+                  <p className="mt-2 font-mono text-[9px] text-ink-400">
+                    Demo accounts not loaded — check the API URL (server icon), then Retry.
+                  </p>
+                )}
+              </Panel>
+
+              {/* ------------------------------------------- demo accounts ---- */}
+              <Panel
+                title="Demo accounts"
+                subtitle="Seeded prototype users — click to fill the form"
+                className="self-start"
+              >
               {accounts.data && demoAccounts.length > 0 ? (
                 <ul className="space-y-2">
                   {demoAccounts.map((a, i) => (
@@ -219,6 +282,7 @@ export default function Login() {
                   'Seeded prototype accounts only. Real deployments create users through the admin API.'}
               </p>
             </Panel>
+            </div>
           </div>
         </motion.div>
       </div>
