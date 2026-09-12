@@ -1,12 +1,11 @@
 /**
  * Predict — "Real-Time Telemetry Feed" (Atmospheric Ingest & Runoff Model).
  *
- * The atmosphere card is deliberately map-free (maps live on the Map screen):
- * the left half is the simulated threat radar, the right half is the LIVE
- * Open-Meteo atmospheric ingest for the top-priority zone — temperature,
- * wind, humidity, cloud and the next-12-hour precipitation forecast, all
- * labelled LIVE. If the provider is unreachable the panel says so and the
- * engine's simulated values stay visible in the ribbon.
+ * The atmosphere card keeps the live ingest on the right; on the left is the
+ * Mumbai topology layer map (wards, rivers, creeks, flood spots, transport) so
+ * the operator reads the threat against the actual city, not a radar cartoon.
+ * If the provider is unreachable the panel says so and the engine's simulated
+ * values stay visible in the ribbon.
  *
  * The timeline, confidence and vector metrics are the engine's real values
  * for the current top-priority zone. The scrubber only interpolates between
@@ -18,7 +17,7 @@ import {
   Eye,
   Gauge,
   Hourglass,
-  Radar as RadarIcon,
+  MapPinned,
   ShieldCheck,
   Timer,
   TrendingUp,
@@ -28,7 +27,7 @@ import {
 import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
 import { Page, Rise, Stagger } from '../../components/anim'
-import { RadarCanvas } from '../../components/RadarCanvas'
+import { TopologyPanel } from '../../components/TopologyPanel'
 import { Chip, MetricCard, Panel, SegmentedGauge, StatusPip, Unavailable } from '../../components/ui'
 import { api } from '../../lib/api'
 import { LEVEL_VAR, fmtNumber, relativeTime, titleCase } from '../../lib/format'
@@ -132,6 +131,7 @@ export default function Telemetry() {
   const alerts = useApi(() => api.alerts({ limit: 10 }))
   const models = useApi(() => api.models())
   const sim = useApi(() => api.simState())
+  const topology = useApi(() => api.topology())
 
   const top = overview.data?.priority_queue?.[0]
   const risk = useApi((s) => api.risk(top!.location_id, { detail: true, lang: 'en' }, s), {
@@ -207,13 +207,13 @@ export default function Telemetry() {
       <Rise>
         <div className="relative mb-3 overflow-hidden rounded-lg border border-ink-600 bg-ink-950 shadow-xl">
           <div className="grid md:grid-cols-[1fr_21rem]">
-            {/* left: threat radar — engine cells, explicitly SIMULATED */}
-            <div className="relative">
-              <RadarCanvas cells={cells} />
-              <div className="pointer-events-none absolute top-2 left-2 flex flex-col items-start gap-1">
+            {/* left: Mumbai topology layer map — engine cells as an optional overlay */}
+            <div className="relative h-full min-h-80">
+              <TopologyPanel data={topology.data} threatCells={cells} className="h-full min-h-80" />
+              <div className="pointer-events-none absolute top-2 right-2 flex flex-col items-end gap-1">
                 <span className="flex items-center gap-1.5 rounded bg-ink-950/85 px-2 py-1 backdrop-blur-md">
-                  <RadarIcon size={13} className="text-accent-bright" aria-hidden />
-                  <span className="font-mono text-[11px] text-ink-100">THREAT RADAR · SIMULATED</span>
+                  <MapPinned size={13} className="text-accent-bright" aria-hidden />
+                  <span className="font-mono text-[11px] text-ink-100">MUMBAI TOPOLOGY · {t('label.simulated').toUpperCase()}</span>
                 </span>
                 <span className="flex items-center gap-1.5 rounded bg-critical/25 px-2 py-1 backdrop-blur-md">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-critical" />
@@ -324,8 +324,8 @@ export default function Telemetry() {
                 <div className="flex flex-1 flex-col gap-2">
                   <span className="font-mono text-[11px] font-bold text-moderate">LIVE FEED UNREACHABLE</span>
                   <p className="text-[11px] leading-snug text-ink-400">
-                    The external weather provider cannot be reached from this machine right now. The radar at left
-                    stays the simulated engine view, and the ribbon below keeps showing the engine's values.
+                    The external weather provider cannot be reached from this machine right now. The topology map at
+                    left stays the simulated engine view, and the ribbon below keeps showing the engine's values.
                   </p>
                 </div>
               ) : (

@@ -138,13 +138,13 @@ describe('new tactical screens', () => {
     await waitFor(() => expect(screen.getByText(/Time-To-Crest Forecast/i)).toBeInTheDocument())
     expect(screen.getByText(/Model Certainty/i)).toBeInTheDocument()
     // The atmosphere card must show either the LIVE Open-Meteo badge, an
-    // honest "live feed unreachable — simulated" fallback, or its loading
-    // state — never a blank card.
+    // honest "live feed unreachable" fallback, or its loading state — never
+    // a blank card. (The radar is now the Mumbai topology layer map.)
     await waitFor(
       () =>
         expect(
           document.body.textContent,
-        ).toMatch(/LIVE: OPEN-METEO|LIVE FEED UNREACHABLE — SIMULATED RADAR|CONNECTING TO LIVE ATMOSPHERIC FEED/),
+        ).toMatch(/LIVE: OPEN-METEO|LIVE FEED UNREACHABLE|CONNECTING TO LIVE ATMOSPHERIC FEED/),
       { timeout: 25000 },
     )
     // Give the live payload time to arrive and the map + wind overlay to

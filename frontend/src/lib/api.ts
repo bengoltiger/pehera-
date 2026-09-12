@@ -56,6 +56,7 @@ import type {
   TerrainGrid,
   ThreatCell,
   TokenResponse,
+  TopologyResponse,
   TrafficState,
   User,
 } from './types'
@@ -363,6 +364,9 @@ export const api = {
     request<TerrainGrid>(`/api/terrain${qs(params)}`),
   terrainPoint: (lat: number, lng: number) =>
     request<Record<string, unknown>>(`/api/terrain/point${qs({ lat, lng })}`),
+
+  /* ---- Mumbai topology (Predict map) ------------------------------------ */
+  topology: () => request<TopologyResponse>('/api/map/topology'),
 
   /* ---- storm system ---------------------------------------------------- */
   storm: (params: { lead_ticks?: number } = {}) => request<StormState>(`/api/storm${qs(params)}`),

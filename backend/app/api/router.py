@@ -19,6 +19,7 @@ from app.api.routers import (
     storm,
     system,
     terrain,
+    topology,
     traffic,
 )
 
@@ -31,6 +32,7 @@ api_router.include_router(simulation.router)
 api_router.include_router(analytics.router)
 api_router.include_router(live.router)
 api_router.include_router(terrain.router)
+api_router.include_router(topology.router)
 api_router.include_router(storm.router)
 api_router.include_router(rainfall.router)
 api_router.include_router(traffic.router)

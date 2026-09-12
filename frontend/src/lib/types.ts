@@ -1123,3 +1123,56 @@ export interface HeartbeatResponse {
   is_simulated: boolean
   published_events: number
 }
+
+/* ------------------------------------------------------------------------- */
+/* Mumbai regional topology bundle (Predict / Telemetry map)                 */
+/* ------------------------------------------------------------------------- */
+
+export interface TopologyRegion {
+  name: string
+  short_name: string
+  center: [number, number]
+  km_bounds: [number, number, number, number]
+  zoom: number
+  zone_count: number
+}
+
+export interface TopologyCategory {
+  id: string
+  label: string
+  color: string
+}
+
+export type TopologyKind = 'point' | 'polyline' | 'polygon'
+
+export interface TopologyPointFeature {
+  name: string
+  lat: number
+  lng: number
+  detail?: string
+}
+
+export interface TopologyLineFeature {
+  name?: string
+  detail?: string
+  coords: [number, number][]
+}
+
+export interface TopologyLayer {
+  id: string
+  category: string
+  kind: TopologyKind
+  name: string
+  summary: string
+  features: (TopologyPointFeature | TopologyLineFeature)[]
+}
+
+export interface TopologyResponse {
+  region: TopologyRegion
+  categories: TopologyCategory[]
+  layers: TopologyLayer[]
+  layer_count: number
+  generated_at: string
+  is_simulated: boolean
+  note: string
+}

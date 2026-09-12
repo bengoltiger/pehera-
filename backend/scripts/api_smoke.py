@@ -82,6 +82,7 @@ if t["count"]:
     cid = t["threat_cells"][0]["id"]; call("GET", f"/api/threats/{cid}")
 call("GET", "/api/early-signals")
 dh = call("GET", "/api/data-health"); print("     data health:", dh["score"], dh["grade"])
+tg = call("GET", "/api/map/topology"); print("     topology layers:", tg["layer_count"], "| categories", ", ".join(c["id"] for c in tg["categories"]))
 
 print("— sim controls —")
 call("POST", "/api/simulation/step", {"steps":2}, token=tok)
