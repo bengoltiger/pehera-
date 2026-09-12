@@ -3,7 +3,8 @@
   "appName": "PEHRA Citizen",
   "webDir": "../backend/static",
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "allowMixedContent": true
   },
   "plugins": {
     "BluetoothLE": {}
